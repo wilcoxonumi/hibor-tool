@@ -58,7 +58,7 @@ with st.sidebar:
     # 按钮
     fetch_btn = st.button("点击提取数据", type="primary")
 
-# === 5. 通用数据提取函数 ===
+# === 5. 通用数据提取函数 (修复版) ===
 @st.cache_data
 def fetch_hkma_data(api_url, segment, start_str, end_str):
     pagesize = 1000 # 如果数据量大，可以调大
@@ -67,26 +67,37 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     
     placeholder = st.empty()
     
+    # 将字符串日期转为 datetime 对象，用于后续的 Python 端强制过滤
+    # 这是解决“日期总是从最早开始”的关键步骤
+    target_start = pd.to_datetime(start_str)
+    target_end = pd.to_datetime(end_str)
+    
     while True:
         placeholder.text(f"正在读取 HKMA 接口... Offset: {offset}")
         
-        # 构建 URL，根据是否有 segment 参数动态调整
-        params_str = f"?from={start_str}&to={end_str}&pagesize={pagesize}&offset={offset}"
+        # 【优化】使用 params 字典代替手动拼字符串，更加稳定且防错
+        params = {
+            "pagesize": pagesize,
+            "offset": offset,
+            "from": start_str,
+            "to": end_str
+        }
         if segment:
-            params_str += f"&segment={segment}"
+            params["segment"] = segment
             
-        full_url = api_url + params_str
-        
         try:
-            response = requests.get(full_url)
+            # requests 库会自动将 params 拼接到 URL 后面
+            response = requests.get(api_url, params=params)
             response.raise_for_status()
             data = response.json()
             records = data.get("result", {}).get("records", [])
             
             if not records:
                 break
+            
             all_records.extend(records)
             offset += pagesize
+            
         except Exception as e:
             st.error(f"API 请求失败: {e}")
             break
@@ -97,6 +108,29 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         return pd.DataFrame()
     
     df = pd.DataFrame(all_records)
+    
+    # === 关键修复：Python 端强制二次过滤 ===
+    # 就算 API 返回了 1990 年的数据，这里也会在本地把它删掉
+    
+    # 1. 自动寻找日期列 (适配 HIBOR 和 存款利率)
+    date_col_found = None
+    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
+    for col in possible_date_cols:
+        if col in df.columns:
+            date_col_found = col
+            break
+            
+    if date_col_found:
+        # 2. 转为 datetime 格式
+        df[date_col_found] = pd.to_datetime(df[date_col_found])
+        
+        # 3. 【核心步骤】强制删除范围外的数据
+        mask = (df[date_col_found] >= target_start) & (df[date_col_found] <= target_end)
+        df = df.loc[mask]
+        
+        # 4. 按日期排序 (保证图表线条连贯)
+        df = df.sort_values(date_col_found)
+        
     return df
 
 # === 6. 处理按钮逻辑 ===
