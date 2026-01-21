@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from datetime import date
 
 # === 1. 页面配置 ===
-st.set_page_config(page_title="HKMA HIBOR 高级分析工具", layout="wide")
-st.title("🇭🇰 HIBOR 数据提取与分析工具")
+st.set_page_config(page_title="HKMA HIBOR提取", layout="wide")
+st.title("HIBOR 数据提取与作图")
 
 # === 2. 初始化 Session State (关键步骤) ===
 # 用于在此时刻保存数据，防止用户调整作图选项时数据丢失
@@ -24,7 +24,7 @@ with st.sidebar:
     fetch_start = st.date_input("抓取开始日期", default_start)
     fetch_end = st.date_input("抓取结束日期", date.today())
     
-    fetch_btn = st.button("🚀 点击提取数据", type="primary")
+    fetch_btn = st.button("点击提取数据", type="primary")
 
 # === 4. 数据提取函数 (保持不变) ===
 @st.cache_data
@@ -111,7 +111,7 @@ if st.session_state['df_all'] is not None:
     st.header("3. 交互式分析图表")
     
     # B1. 筛选控制器
-    st.subheader("🛠️ 图表设置")
+    st.subheader("图表设置")
     c1, c2 = st.columns(2)
     
     with c1:
@@ -161,4 +161,4 @@ if st.session_state['df_all'] is not None:
         st.info("请在上方至少选择一个变量进行作图。")
 
 elif not fetch_btn:
-    st.info("👈 请在左侧侧边栏设置日期并点击“提取数据”开始。")
+    st.info("请在左侧侧边栏设置日期并点击“提取数据”开始。")
