@@ -15,13 +15,15 @@ API_CONFIG = {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
         "segment": "hibor.fixing",
         "date_col": "end_of_day",  # HIBOR API 返回的日期列名
-        "prefix": "ir"             # 用于识别数据列的前缀 (ir_1m, ir_3m...)
+        "prefix": "ir",             # 用于识别数据列的前缀 (ir_1m, ir_3m...)
+        "title_en": "HIBOR Interest Rates - Daily"
     },
     "RMB Deposit Rates (人民币存款利率)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr",
         "segment": None,           # 这个API可能不需要segment参数，或者视具体文档而定
         "date_col": "end_of_month", # 注意：存款利率通常是月度数据，日期列名可能不同
-        "prefix": "sav"            # 假设存款列包含 sav (savings) 或 term，稍后我们用自动识别
+        "prefix": "sav",            # 假设存款列包含 sav (savings) 或 term，稍后我们用自动识别
+        "title_en": "RMB Deposit Rates"
     }
 }
 
@@ -189,9 +191,10 @@ if st.session_state['df_all'] is not None:
         for col in selected_vars:
             # 强制转为数字，处理可能的非数字字符
             series = pd.to_numeric(plot_df[col], errors='coerce')
-            ax.plot(plot_df['date_obj'], series, label=col, marker='o', markersize=3)
+            ax.plot(plot_df['date_obj'], series, label=col)
             
-        ax.set_title(f"{st.session_state['current_source']} 走势")
+        current_config = API_CONFIG[st.session_state['current_source']]
+        ax.set_title(current_config['title_en'])
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.6)
         st.pyplot(fig)
