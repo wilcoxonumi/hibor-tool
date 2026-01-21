@@ -6,7 +6,7 @@ from datetime import date
 
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
-st.title("HKMA 金融数据提取与分析工具")
+st.title("HKMA 金融数据提取工具")
 
 # === 2. 定义数据源配置 (核心修改点) ===
 # 以后如果想加新数据，就在这里加一行
@@ -157,7 +157,7 @@ if st.session_state['df_all'] is not None:
     st.divider()
 
     # --- 作图模块 ---
-    st.header("3. 交互式分析")
+    st.header("3. 作图")
     
     # 1. 智能列过滤 (完整保留原逻辑)
     # 排除掉 ID, Date 等非数值列
