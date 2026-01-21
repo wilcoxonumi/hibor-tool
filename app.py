@@ -159,47 +159,103 @@ if st.session_state['df_all'] is not None:
     # --- 作图模块 ---
     st.header("3. 交互式分析")
     
-    # 智能列过滤：排除掉 ID, Date 等非数值列
-    # 我们只保留 float/int 类型的列，且排除掉常见的 ID 列
+    # 1. 智能列过滤 (完整保留原逻辑)
+    # 排除掉 ID, Date 等非数值列
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
     plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
     
-    # 如果没找到数值列（万一所有都是字符串），尝试找所有非日期列
+    # 兜底逻辑：如果没找到数值列，尝试找所有非日期列
     if not plot_options:
-        plot_options = [c for c in df.columns if c != 'date_obj' and c != date_col_found]
+        # 这里做了一点小优化，确保也不包含我们生成的 date_obj
+        plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
 
-    c1, c2 = st.columns(2)
-    with c1:
+    # 2. 获取数据的时间边界
+    min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
+
+    # --- 新增：初始化 Session State 用于双向同步 ---
+    if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d:
+        st.session_state.plot_start = min_d
+    if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d:
+        st.session_state.plot_end = max_d
+        
+    # 回调函数：滑块拖动 -> 更新输入框
+    def update_inputs_from_slider():
+        st.session_state.plot_start = st.session_state.slider_range[0]
+        st.session_state.plot_end = st.session_state.slider_range[1]
+
+    # 回调函数：输入框修改 -> 更新滑块
+    def update_slider_from_inputs():
+        if st.session_state.plot_start > st.session_state.plot_end:
+            st.error("开始日期不能晚于结束日期")
+        # 同步给滑块的 key
+        st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
+
+    # 3. 布局调整：改成三栏 [变量选择(宽) | 开始日期 | 结束日期]
+    col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
+    
+    with col_sel:
         selected_vars = st.multiselect(
             "选择变量 (Y轴)",
             options=plot_options,
-            default=plot_options[:2] if len(plot_options) >= 2 else plot_options # 默认选前两个
+            default=plot_options[:2] if len(plot_options) >= 2 else plot_options
         )
-    with c2:
-        min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
-        plot_dates = st.slider("时间区间 (X轴)", min_d, max_d, (min_d, max_d))
+    
+    with col_date1:
+        st.date_input(
+            "开始日期",
+            key="plot_start",
+            min_value=min_d,
+            max_value=max_d,
+            on_change=update_slider_from_inputs # 绑定回调
+        )
+        
+    with col_date2:
+        st.date_input(
+            "结束日期",
+            key="plot_end",
+            min_value=min_d,
+            max_value=max_d,
+            on_change=update_slider_from_inputs # 绑定回调
+        )
 
-    # 作图执行
+    # 4. 布局：下方长滑块 (快速拖拽)
+    st.slider(
+        "快速拖拽调整区间",
+        min_value=min_d,
+        max_value=max_d,
+        value=(st.session_state.plot_start, st.session_state.plot_end),
+        key="slider_range",
+        on_change=update_inputs_from_slider # 绑定回调
+    )
+
+    # 5. 作图执行
     if selected_vars:
-        # 筛选
-        mask = (df['date_obj'].dt.date >= plot_dates[0]) & (df['date_obj'].dt.date <= plot_dates[1])
+        # 使用 session_state 中的精确日期进行过滤
+        current_start = st.session_state.plot_start
+        current_end = st.session_state.plot_end
+        
+        mask = (df['date_obj'].dt.date >= current_start) & (df['date_obj'].dt.date <= current_end)
         plot_df = df.loc[mask]
         
-        fig, ax = plt.subplots(figsize=(12, 5))
-        
-        for col in selected_vars:
-            # 强制转为数字，处理可能的非数字字符
-            series = pd.to_numeric(plot_df[col], errors='coerce')
-            ax.plot(plot_df['date_obj'], series, label=col)
+        if plot_df.empty:
+            st.warning("所选时间段内没有数据。")
+        else:
+            fig, ax = plt.subplots(figsize=(12, 5))
             
-        current_config = API_CONFIG[st.session_state['current_source']]
-        ax.set_title(current_config['title_en'])
-        ax.legend()
-        ax.grid(True, linestyle='--', alpha=0.6)
-        st.pyplot(fig)
+            for col in selected_vars:
+                # 核心防错：强制转数字
+                series = pd.to_numeric(plot_df[col], errors='coerce')
+                # 核心修改：去掉 marker='o'，线条更平滑
+                ax.plot(plot_df['date_obj'], series, label=col, linewidth=1.5)
+                
+            # 核心修改：使用英文标题 (从 API_CONFIG 读取)
+            # 使用 .get 方法防止未来加了新API忘记写 title_en 导致报错
+            current_config = API_CONFIG[st.session_state['current_source']]
+            ax.set_title(current_config.get('title_en', 'Data Trends'))
+            
+            ax.legend()
+            ax.grid(True, linestyle='--', alpha=0.6)
+            st.pyplot(fig)
     else:
         st.info("请选择至少一个变量进行作图。")
-
-elif not fetch_btn:
-    st.info("👈 请在左侧选择数据类型并提取数据。")
