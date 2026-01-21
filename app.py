@@ -95,7 +95,7 @@ if st.session_state['df_all'] is not None:
         file_name = f"hibor_raw_{df['end_of_day'].min().date()}_{df['end_of_day'].max().date()}.csv"
         
         st.download_button(
-            label="📥 下载全量 CSV",
+            label="下载 CSV",
             data=csv,
             file_name=file_name,
             mime='text/csv',
