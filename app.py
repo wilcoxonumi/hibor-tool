@@ -50,10 +50,27 @@ with st.sidebar:
     
     st.info(f"设置 {selected_source_name} 的抓取范围")
     
-    # 默认抓取过去一年的数据
+    # === 关键设置 ===
+    # 1. 定义最早允许选到的日期 (比如 1990年，打破默认的10年限制)
+    earliest_date = date(1990, 1, 1)
+    
+    # 2. 定义默认显示的日期 (保持你想要的“过去一年”)
     default_start = date(date.today().year - 1, 1, 1)
-    fetch_start = st.date_input("抓取开始日期", default_start)
-    fetch_end = st.date_input("抓取结束日期", date.today())
+    
+    # 3. 应用到输入框
+    fetch_start = st.date_input(
+        "抓取开始日期", 
+        value=default_start,     # <--- 默认显示：去年 (User Experience Good)
+        min_value=earliest_date, # <--- 允许翻页：直到 1990 (Capability Good)
+        max_value=date.today()
+    )
+    
+    fetch_end = st.date_input(
+        "抓取结束日期", 
+        value=date.today(),
+        min_value=earliest_date,
+        max_value=date.today()
+    )
     
     # 按钮
     fetch_btn = st.button("点击提取数据", type="primary")
