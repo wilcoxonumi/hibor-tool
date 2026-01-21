@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from datetime import date
 
 # === 1. 页面基本配置 ===
-st.set_page_config(page_title="HKMA 金融数据看板", layout="wide")
-st.title("🇭🇰 HKMA 金融数据提取与分析工具")
+st.set_page_config(page_title="HKMA 数据", layout="wide")
+st.title("HKMA 金融数据提取与分析工具")
 
 # === 2. 定义数据源配置 (核心修改点) ===
 # 以后如果想加新数据，就在这里加一行
@@ -56,7 +56,7 @@ with st.sidebar:
     fetch_end = st.date_input("抓取结束日期", date.today())
     
     # 按钮
-    fetch_btn = st.button("🚀 点击提取数据", type="primary")
+    fetch_btn = st.button("点击提取数据", type="primary")
 
 # === 5. 通用数据提取函数 ===
 @st.cache_data
@@ -148,7 +148,7 @@ if st.session_state['df_all'] is not None:
     with col_d1:
         csv = df.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
         file_name = f"hkma_data_{fetch_start}_{fetch_end}.csv"
-        st.download_button("📥 下载 CSV", csv, file_name, "text/csv")
+        st.download_button("下载 CSV", csv, file_name, "text/csv")
     
     with col_d2:
         with st.expander("预览数据"):
