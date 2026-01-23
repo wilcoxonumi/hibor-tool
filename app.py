@@ -24,6 +24,13 @@ API_CONFIG = {
         "date_col": "end_of_month", # 注意：存款利率通常是月度数据，日期列名可能不同
         "prefix": "sav",            # 假设存款列包含 sav (savings) 或 term，稍后我们用自动识别
         "title_en": "RMB Deposit Rates"
+    },
+    "Monetary Statistics (货币统计)": {
+        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics",
+        "segment": None,            # 如果提取失败，可能需要指定 segment (如 'money_supply')，但通常可为空
+        "date_col": "end_of_month", # 货币统计通常是月度报告
+        "prefix": "m",              # 这里的 m 代表 Money Supply (M1, M2, M3)，主要用于标识
+        "title_en": "Monetary Statistics (M1/M2/M3)"
     }
 }
 
