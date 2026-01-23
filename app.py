@@ -4,11 +4,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import date
 
+# === 0. [新增] 字体设置 (解决图例中文显示问题) ===
+# 尝试设置中文字体，解决 matplotlib 默认无法显示中文的问题
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'sans-serif'] 
+plt.rcParams['axes.unicode_minus'] = False # 解决负号显示为方块的问题
+
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
 st.title("🇭🇰 HKMA 金融数据提取工具")
 
-# === 2. 定义数据源配置 ===
+# === 2. 定义数据源配置 (已修正：只保留3个接口) ===
 API_CONFIG = {
     "HIBOR (香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
@@ -30,28 +35,20 @@ API_CONFIG = {
         "date_col": "end_of_month",
         "title_en": "Monetary Statistics (M1/M2/M3)",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
-    },
-    "Exchange Rates & Interest Rates (汇率与利率综合)": {
-        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-exchange-rates-daily", 
-        "segment": None,
-        "date_col": "end_of_day",
-        "title_en": "Exchange Rates & Yields",
-        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-exchange-rates-daily/"
     }
 }
 
-# === 3. 读取 CSV 配置 (清爽版) ===
+# === 3. 读取 CSV 配置 ===
 @st.cache_data
 def load_variable_meta():
     try:
-        # 因为 CSV 格式现在是标准的，所以直接读就行
+        # 直接读取标准 CSV
         df_meta = pd.read_csv("variable_config.csv")
-        # 简单去重，防止 CSV 里有重复行
+        # 去重
         df_meta = df_meta.drop_duplicates(subset=['variable'])
         # 转字典
         return df_meta.set_index('variable').to_dict(orient='index')
     except Exception as e:
-        # 如果找不到文件，就在界面上提示一下，不报错崩溃
         st.warning("⚠️ 提示: 目录下没有找到 variable_config.csv，将显示原始英文代码。")
         return {}
 
@@ -88,7 +85,7 @@ with st.sidebar:
     
     fetch_btn = st.button("🚀 点击提取数据", type="primary")
 
-# === 6. 数据提取函数 (稳定版) ===
+# === 6. 数据提取函数 ===
 @st.cache_data
 def fetch_hkma_data(api_url, segment, start_str, end_str):
     pagesize = 1000
@@ -133,135 +130,3 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         df = df.dropna(subset=[date_col_found])
         mask = (df[date_col_found] >= target_start) & (df[date_col_found] <= target_end)
         df = df.loc[mask].sort_values(date_col_found)
-        
-    return df
-
-# === 7. 执行提取逻辑 ===
-if fetch_btn:
-    if st.session_state['current_source'] != selected_source_name:
-        st.session_state['df_all'] = None
-        st.session_state['current_source'] = selected_source_name
-        if 'plot_start' in st.session_state: del st.session_state.plot_start
-        if 'plot_end' in st.session_state: del st.session_state.plot_end
-
-    with st.spinner(f'正在获取 {selected_source_name} 数据...'):
-        df_new = fetch_hkma_data(
-            current_config['url'],
-            current_config['segment'],
-            fetch_start.strftime("%Y-%m-%d"),
-            fetch_end.strftime("%Y-%m-%d")
-        )
-        
-        if not df_new.empty:
-            date_col_found = None
-            possible_date_cols = ['end_of_day', 'end_of_month', 'date']
-            for col in possible_date_cols:
-                if col in df_new.columns:
-                    date_col_found = col
-                    break
-            if date_col_found:
-                df_new['date_obj'] = df_new[date_col_found]
-                st.session_state['df_all'] = df_new
-                st.success(f"成功！获取了 {len(df_new)} 条记录。")
-            else:
-                st.error("未找到日期列。")
-        else:
-            st.warning("未找到数据，请检查日期范围。")
-
-# === 8. 主界面展示 ===
-if st.session_state['df_all'] is not None:
-    df = st.session_state['df_all']
-    current_config = API_CONFIG[st.session_state['current_source']]
-    
-    st.divider()
-    
-    # --- 下载模块 ---
-    st.header(f"2. 数据下载: {st.session_state['current_source']}")
-    if "doc_url" in current_config:
-        st.markdown(f"📚 **数据定义与来源:** [点击查看 HKMA 官方字段说明文档]({current_config['doc_url']})")
-    
-    col_d1, col_d2 = st.columns([1, 4])
-    with col_d1:
-        df_download = df.copy()
-        date_col_name = current_config.get('date_col', 'end_of_day')
-        date_format = '%Y-%m' if 'month' in date_col_name.lower() else '%Y-%m-%d'
-        
-        if date_col_name in df_download.columns:
-            df_download[date_col_name] = df_download[date_col_name].dt.strftime(date_format)
-        if 'date_obj' in df_download.columns:
-            df_download = df_download.drop(columns=['date_obj'])
-
-        csv = df_download.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
-        file_name = f"hkma_data_{fetch_start}_{fetch_end}.csv"
-        st.download_button("📥 下载 CSV", csv, file_name, "text/csv")
-    
-    with col_d2:
-        with st.expander("👁️ 预览数据 & 字段说明"):
-            st.subheader("前 5 行数据")
-            st.dataframe(df_download.head())
-            st.subheader("📋 字段说明")
-            meta_data_list = []
-            for col in df_download.columns:
-                if col in VARIABLE_META:
-                    info = VARIABLE_META[col]
-                    meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
-            if meta_data_list: st.table(pd.DataFrame(meta_data_list))
-
-    # --- 作图模块 ---
-    st.header("3. 交互式分析")
-    
-    # 列筛选
-    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
-    plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
-    if not plot_options:
-         plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
-
-    # 日期滑块同步
-    min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
-    if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d: st.session_state.plot_start = min_d
-    if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d: st.session_state.plot_end = max_d
-        
-    def update_inputs(): st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
-    def update_slider(): st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
-
-    col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
-    with col_sel:
-        # 下拉框显示中文
-        selected_vars = st.multiselect(
-            "选择变量 (Y轴)",
-            options=plot_options,
-            format_func=lambda x: f"{get_display_info(x)['label']} ({x})",
-            default=plot_options[:2] if len(plot_options) >= 2 else plot_options
-        )
-    with col_date1: st.date_input("开始日期", key="plot_start", min_value=min_d, max_value=max_d, on_change=update_slider)
-    with col_date2: st.date_input("结束日期", key="plot_end", min_value=min_d, max_value=max_d, on_change=update_slider)
-    st.slider("快速拖拽区间", min_value=min_d, max_value=max_d, value=(st.session_state.plot_start, st.session_state.plot_end), key="slider_range", on_change=update_inputs)
-
-    if selected_vars:
-        current_start, current_end = st.session_state.plot_start, st.session_state.plot_end
-        mask = (df['date_obj'].dt.date >= current_start) & (df['date_obj'].dt.date <= current_end)
-        plot_df = df.loc[mask]
-        
-        if plot_df.empty:
-            st.warning("该时段无数据。")
-        else:
-            fig, ax = plt.subplots(figsize=(12, 5))
-            for col in selected_vars:
-                series = pd.to_numeric(plot_df[col], errors='coerce')
-                
-                # 图例显示中文
-                info = get_display_info(col)
-                legend_label = f"{info['label']}"
-                if info['unit']: legend_label += f" ({info['unit']})"
-                
-                ax.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5)
-            
-            ax.set_title(current_config.get('title_en', 'Data Trends'))
-            ax.legend()
-            ax.grid(True, linestyle='--', alpha=0.6)
-            st.pyplot(fig)
-    else:
-        st.info("请选择变量。")
-elif not fetch_btn:
-    st.info("👈 请先在左侧提取数据。")
