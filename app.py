@@ -82,24 +82,21 @@ with st.sidebar:
     # 按钮
     fetch_btn = st.button("点击提取数据", type="primary")
 
-# === 5. 通用数据提取函数 (修复版) ===
+# === 5. 通用数据提取函数 (修复日期报错版) ===
 @st.cache_data
 def fetch_hkma_data(api_url, segment, start_str, end_str):
-    pagesize = 1000 # 如果数据量大，可以调大
+    pagesize = 1000
     offset = 0
     all_records = []
     
     placeholder = st.empty()
     
-    # 将字符串日期转为 datetime 对象，用于后续的 Python 端强制过滤
-    # 这是解决“日期总是从最早开始”的关键步骤
     target_start = pd.to_datetime(start_str)
     target_end = pd.to_datetime(end_str)
     
     while True:
         placeholder.text(f"正在读取 HKMA 接口... Offset: {offset}")
         
-        # 【优化】使用 params 字典代替手动拼字符串，更加稳定且防错
         params = {
             "pagesize": pagesize,
             "offset": offset,
@@ -110,7 +107,6 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
             params["segment"] = segment
             
         try:
-            # requests 库会自动将 params 拼接到 URL 后面
             response = requests.get(api_url, params=params)
             response.raise_for_status()
             data = response.json()
@@ -132,6 +128,34 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         return pd.DataFrame()
     
     df = pd.DataFrame(all_records)
+    
+    # === 关键修复位置 ===
+    
+    # 1. 自动寻找日期列
+    date_col_found = None
+    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
+    for col in possible_date_cols:
+        if col in df.columns:
+            date_col_found = col
+            break
+            
+    if date_col_found:
+        # 2. 转为 datetime 格式 (这里加了 errors='coerce')
+        # 如果遇到无法解析的乱码或空值，它会变成 NaT (Not a Time)，而不会报错
+        df[date_col_found] = pd.to_datetime(df[date_col_found], errors='coerce')
+        
+        # 2.1 [新增] 删除那些转换失败的行 (NaT)
+        # 这一步非常重要，防止后面作图时因为空时间报错
+        df = df.dropna(subset=[date_col_found])
+        
+        # 3. 强制删除范围外的数据
+        mask = (df[date_col_found] >= target_start) & (df[date_col_found] <= target_end)
+        df = df.loc[mask]
+        
+        # 4. 按日期排序
+        df = df.sort_values(date_col_found)
+        
+    return df
     
     # === 关键修复：Python 端强制二次过滤 ===
     # 就算 API 返回了 1990 年的数据，这里也会在本地把它删掉
