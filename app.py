@@ -228,15 +228,40 @@ if st.session_state['df_all'] is not None:
     
     col_d1, col_d2 = st.columns([1, 4])
     with col_d1:
-        csv = df.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
+        # === 核心修改：创建专门用于下载的数据副本 ===
+        df_download = df.copy()
+        
+        # 1. 获取当前数据源的日期列名 (end_of_day 或 end_of_month)
+        current_config = API_CONFIG[st.session_state['current_source']]
+        date_col_name = current_config.get('date_col', 'end_of_day') 
+        
+        # 2. 智能判断格式
+        # 如果日期列名里包含 "month" (比如 end_of_month)，就只保留 "年-月"
+        if 'month' in date_col_name.lower():
+            date_format = '%Y-%m'  # 结果: 2025-12
+        else:
+            date_format = '%Y-%m-%d' # 结果: 2025-12-01 (去掉了 00:00:00)
+            
+        # 3. 应用格式化
+        # 确保该列存在，并且是 datetime 类型 (我们之前的 fetch 函数已经转好了)
+        if date_col_name in df_download.columns:
+            # 使用 .dt.strftime 将日期对象转为指定格式的字符串
+            df_download[date_col_name] = df_download[date_col_name].dt.strftime(date_format)
+            
+        # (可选) 如果 CSV 里还有 date_obj 这个辅助列，为了美观也统一格式化
+        if 'date_obj' in df_download.columns:
+            df_download['date_obj'] = df_download['date_obj'].dt.strftime(date_format)
+
+        # 4. 生成 CSV
+        csv = df_download.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
         file_name = f"hkma_data_{fetch_start}_{fetch_end}.csv"
-        st.download_button("下载 CSV", csv, file_name, "text/csv")
+        
+        st.download_button("📥 下载 CSV", csv, file_name, "text/csv")
     
     with col_d2:
         with st.expander("预览数据"):
-            st.dataframe(df.head())
-
-    st.divider()
+            # 预览时也显示格式化后的数据，体验更好
+            st.dataframe(df_download.head())
 
     # --- 作图模块 ---
     st.header("3. 作图")
