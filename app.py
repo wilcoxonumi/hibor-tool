@@ -2,18 +2,15 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm # <--- 引入字体管理器
+import os
 from datetime import date
-
-# === 0. [新增] 字体设置 (解决图例中文显示问题) ===
-# 尝试设置中文字体，解决 matplotlib 默认无法显示中文的问题
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'sans-serif'] 
-plt.rcParams['axes.unicode_minus'] = False # 解决负号显示为方块的问题
 
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
 st.title("🇭🇰 HKMA 金融数据提取工具")
 
-# === 2. 定义数据源配置 (已修正：只保留3个接口) ===
+# === 2. 定义数据源配置 ===
 API_CONFIG = {
     "HIBOR (香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
@@ -42,20 +39,15 @@ API_CONFIG = {
 @st.cache_data
 def load_variable_meta():
     try:
-        # 直接读取标准 CSV
         df_meta = pd.read_csv("variable_config.csv")
-        # 去重
         df_meta = df_meta.drop_duplicates(subset=['variable'])
-        # 转字典
         return df_meta.set_index('variable').to_dict(orient='index')
-    except Exception as e:
-        st.warning("⚠️ 提示: 目录下没有找到 variable_config.csv，将显示原始英文代码。")
+    except Exception:
         return {}
 
 VARIABLE_META = load_variable_meta()
 
 def get_display_info(var_name):
-    """获取变量的中文名和单位"""
     info = VARIABLE_META.get(var_name, {"label": var_name, "unit": ""})
     if pd.isna(info.get('unit')): info['unit'] = ""
     if pd.isna(info.get('label')): info['label'] = var_name
@@ -70,19 +62,16 @@ if 'current_source' not in st.session_state:
 # === 5. 侧边栏：控制面板 ===
 with st.sidebar:
     st.header("1. 数据源设置")
-    
     selected_source_name = st.selectbox("选择数据类型", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
-    
     st.divider()
-    st.info(f"设置 {selected_source_name} 的抓取范围")
     
+    st.info(f"设置 {selected_source_name} 的抓取范围")
     earliest_date = date(1990, 1, 1)
     default_start = date(date.today().year - 1, 1, 1)
     
     fetch_start = st.date_input("抓取开始日期", value=default_start, min_value=earliest_date, max_value=date.today())
     fetch_end = st.date_input("抓取结束日期", value=date.today(), min_value=earliest_date, max_value=date.today())
-    
     fetch_btn = st.button("🚀 点击提取数据", type="primary")
 
 # === 6. 数据提取函数 ===
@@ -99,7 +88,6 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         placeholder.text(f"正在读取 HKMA 接口... Offset: {offset}")
         params = {"pagesize": pagesize, "offset": offset, "from": start_str, "to": end_str}
         if segment: params["segment"] = segment
-            
         try:
             response = requests.get(api_url, params=params)
             response.raise_for_status()
@@ -117,7 +105,6 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     
     df = pd.DataFrame(all_records)
     
-    # 清洗日期
     date_col_found = None
     possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
     for col in possible_date_cols:
@@ -204,17 +191,15 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-    # --- 作图模块 ---
+    # --- 作图模块 (含字体修复) ---
     st.header("3. 交互式分析")
     
-    # 列筛选
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
     plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
     if not plot_options:
          plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
 
-    # 日期滑块同步
     min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
     if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d: st.session_state.plot_start = min_d
     if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d: st.session_state.plot_end = max_d
@@ -224,7 +209,6 @@ if st.session_state['df_all'] is not None:
 
     col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
     with col_sel:
-        # 下拉框显示中文
         selected_vars = st.multiselect(
             "选择变量 (Y轴)",
             options=plot_options,
@@ -244,18 +228,39 @@ if st.session_state['df_all'] is not None:
             st.warning("该时段无数据。")
         else:
             fig, ax = plt.subplots(figsize=(12, 5))
+            
+            # === 💡 字体加载逻辑 (核心修改) ===
+            # 检测本地是否有 SimHei.ttf (黑体)
+            my_font = None
+            font_path = "SimHei.ttf" # 请确保这个文件在你的目录下！
+            
+            if os.path.exists(font_path):
+                # 如果找到了文件，直接创建字体对象
+                my_font = fm.FontProperties(fname=font_path)
+            else:
+                # 没找到文件，尝试系统回退 (虽然在Linux上可能无效)
+                st.warning("⚠️ 未检测到 'SimHei.ttf' 字体文件，中文可能无法显示。建议上传字体文件到项目根目录。")
+                plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
+            
             for col in selected_vars:
                 series = pd.to_numeric(plot_df[col], errors='coerce')
-                
-                # 图例显示中文逻辑
                 info = get_display_info(col)
                 legend_label = f"{info['label']}"
                 if info['unit']: legend_label += f" ({info['unit']})"
                 
                 ax.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5)
             
-            ax.set_title(current_config.get('title_en', 'Data Trends'))
-            ax.legend()
+            # 应用字体到标题和图例
+            title_text = current_config.get('title_en', 'Data Trends')
+            
+            # 如果加载了自定义字体，就应用它
+            if my_font:
+                ax.set_title(title_text, fontproperties=my_font)
+                ax.legend(prop=my_font) # <--- 关键：图例使用中文字体
+            else:
+                ax.set_title(title_text)
+                ax.legend()
+                
             ax.grid(True, linestyle='--', alpha=0.6)
             st.pyplot(fig)
     else:
