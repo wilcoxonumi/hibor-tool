@@ -8,7 +8,7 @@ from datetime import date
 
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
-st.title("🇭🇰 HKMA 金融数据提取工具")
+st.title("HKMA 金融数据提取工具")
 
 # === 2. 定义数据源配置 ===
 API_CONFIG = {
@@ -30,7 +30,7 @@ API_CONFIG = {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics",
         "segment": None,
         "date_col": "end_of_month",
-        "title_en": "Monetary Statistics (M1/M2/M3)",
+        "title_en": "Monetary Statistics",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
     }
 }
@@ -72,7 +72,7 @@ with st.sidebar:
     
     fetch_start = st.date_input("抓取开始日期", value=default_start, min_value=earliest_date, max_value=date.today())
     fetch_end = st.date_input("抓取结束日期", value=date.today(), min_value=earliest_date, max_value=date.today())
-    fetch_btn = st.button("🚀 点击提取数据", type="primary")
+    fetch_btn = st.button("点击提取数据", type="primary")
 
 # === 6. 数据提取函数 ===
 @st.cache_data
@@ -146,7 +146,7 @@ if fetch_btn:
             if date_col_found:
                 df_new['date_obj'] = df_new[date_col_found]
                 st.session_state['df_all'] = df_new
-                st.success(f"成功！获取了 {len(df_new)} 条记录。")
+                st.success(f"成功获取了 {len(df_new)} 条记录。")
             else:
                 st.error("未找到日期列。")
         else:
@@ -162,7 +162,7 @@ if st.session_state['df_all'] is not None:
     # --- 下载模块 ---
     st.header(f"2. 数据下载: {st.session_state['current_source']}")
     if "doc_url" in current_config:
-        st.markdown(f"📚 **数据定义与来源:** [点击查看 HKMA 官方字段说明文档]({current_config['doc_url']})")
+        st.markdown(f" **数据定义与来源:** [点击查看 HKMA 官方字段说明文档]({current_config['doc_url']})")
     
     col_d1, col_d2 = st.columns([1, 4])
     with col_d1:
@@ -177,13 +177,13 @@ if st.session_state['df_all'] is not None:
 
         csv = df_download.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
         file_name = f"hkma_data_{fetch_start}_{fetch_end}.csv"
-        st.download_button("📥 下载 CSV", csv, file_name, "text/csv")
+        st.download_button(" 下载 CSV", csv, file_name, "text/csv")
     
     with col_d2:
-        with st.expander("👁️ 预览数据 & 字段说明"):
+        with st.expander(" 预览数据 & 字段说明"):
             st.subheader("前 5 行数据")
             st.dataframe(df_download.head())
-            st.subheader("📋 字段说明")
+            st.subheader("字段说明")
             meta_data_list = []
             for col in df_download.columns:
                 if col in VARIABLE_META:
@@ -232,14 +232,14 @@ if st.session_state['df_all'] is not None:
             # === 💡 字体加载逻辑 (核心修改) ===
             # 检测本地是否有 SimHei.ttf (黑体)
             my_font = None
-            font_path = "SimHei.ttf" # 请确保这个文件在你的目录下！
+            font_path = "SimHei.ttf" # 确保这个文件在目录下
             
             if os.path.exists(font_path):
                 # 如果找到了文件，直接创建字体对象
                 my_font = fm.FontProperties(fname=font_path)
             else:
-                # 没找到文件，尝试系统回退 (虽然在Linux上可能无效)
-                st.warning("⚠️ 未检测到 'SimHei.ttf' 字体文件，中文可能无法显示。建议上传字体文件到项目根目录。")
+                # 没找到文件，尝试系统回退 
+                st.warning(" 未检测到 'SimHei.ttf' 字体文件，中文可能无法显示。建议上传字体文件到项目根目录。")
                 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
             
             for col in selected_vars:
@@ -266,4 +266,4 @@ if st.session_state['df_all'] is not None:
     else:
         st.info("请选择变量。")
 elif not fetch_btn:
-    st.info("👈 请先在左侧提取数据。")
+    st.info("请先在左侧提取数据。")
