@@ -2,9 +2,10 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm 
+import matplotlib.font_manager as fm # <--- 引入字体管理器
 import os
 from datetime import date
+import matplotlib.ticker as mticker
 
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
@@ -150,7 +151,7 @@ if fetch_btn:
             else:
                 st.error("未找到日期列。")
         else:
-            st.warning("未找到数据，检查日期范围。")
+            st.warning("未找到数据，请检查日期范围。")
 
 # === 8. 主界面展示 ===
 if st.session_state['df_all'] is not None:
@@ -191,15 +192,20 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-    # --- 作图模块 (加了字体) ---
-    st.header("3. 作图")
+    # --- 作图模块 (最终优化版) ---
+    st.header("3. 交互式分析")
     
+    # 1. 引入必要的格式化库 (为了保险起见，这里再引用一次，防止你开头没加)
+    import matplotlib.ticker as mticker
+
+    # 2. 列筛选逻辑
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
     plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
     if not plot_options:
          plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
 
+    # 3. 日期滑块与输入框的双向同步
     min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
     if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d: st.session_state.plot_start = min_d
     if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d: st.session_state.plot_end = max_d
@@ -207,18 +213,20 @@ if st.session_state['df_all'] is not None:
     def update_inputs(): st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
     def update_slider(): st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
 
+    # 4. 布局控制
     col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
     with col_sel:
         selected_vars = st.multiselect(
             "选择变量 (Y轴)",
             options=plot_options,
-            format_func=lambda x: f"{get_display_info(x)['label']} ({x})",
+            format_func=lambda x: f"{get_display_info(x)['label']} ({x})", # 显示中文Label
             default=plot_options[:2] if len(plot_options) >= 2 else plot_options
         )
     with col_date1: st.date_input("开始日期", key="plot_start", min_value=min_d, max_value=max_d, on_change=update_slider)
     with col_date2: st.date_input("结束日期", key="plot_end", min_value=min_d, max_value=max_d, on_change=update_slider)
     st.slider("快速拖拽区间", min_value=min_d, max_value=max_d, value=(st.session_state.plot_start, st.session_state.plot_end), key="slider_range", on_change=update_inputs)
 
+    # 5. 开始作图
     if selected_vars:
         current_start, current_end = st.session_state.plot_start, st.session_state.plot_end
         mask = (df['date_obj'].dt.date >= current_start) & (df['date_obj'].dt.date <= current_end)
@@ -229,34 +237,49 @@ if st.session_state['df_all'] is not None:
         else:
             fig, ax = plt.subplots(figsize=(12, 5))
             
-            #  字体
-            # 检测本地是否有 SimHei.ttf (黑体)
+            # === 字体加载 (本地文件优先) ===
+            import os
+            import matplotlib.font_manager as fm
             my_font = None
-            font_path = "SimHei.ttf" # 确保文件在目录下
-            
+            font_path = "SimHei.ttf" # 确保 SimHei.ttf 在同级目录下
             if os.path.exists(font_path):
-                # 
                 my_font = fm.FontProperties(fname=font_path)
             else:
-                # 没找到文件，尝试回退 
-                st.warning(" 未检测到 'SimHei.ttf' 字体文件，中文无法显示。上传字体文件到目录。")
+                # 回退方案
                 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
             
+            # === 绘制线条 ===
             for col in selected_vars:
                 series = pd.to_numeric(plot_df[col], errors='coerce')
+                
+                # 获取中文 Label 和单位
                 info = get_display_info(col)
                 legend_label = f"{info['label']}"
                 if info['unit']: legend_label += f" ({info['unit']})"
                 
                 ax.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5)
             
-            # 
+            # === ✨ Y轴智能格式化 (千分位 + 智能小数) ===
+            def human_format(x, pos):
+                # 1. 零值处理
+                if x == 0: return "0"
+                
+                # 2. 小数值 (如利率 4.52)，保留两位小数
+                if abs(x) < 1000:
+                    return f"{x:.2f}"
+                
+                # 3. 大数值 (如货币供应量)，使用千分位逗号，不带小数
+                # 例如: 10,000,000
+                return f"{x:,.0f}"
+
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(human_format))
+            # ===============================================
+
+            # === 标题与图例设置 ===
             title_text = current_config.get('title_en', 'Data Trends')
-            
-            # 
             if my_font:
                 ax.set_title(title_text, fontproperties=my_font)
-                ax.legend(prop=my_font) # 关键：图例使用中文字体
+                ax.legend(prop=my_font)
             else:
                 ax.set_title(title_text)
                 ax.legend()
@@ -265,5 +288,6 @@ if st.session_state['df_all'] is not None:
             st.pyplot(fig)
     else:
         st.info("请选择变量。")
+
 elif not fetch_btn:
-    st.info("请先在左侧提取数据。")
+    st.info("👈 请先在左侧提取数据。")
