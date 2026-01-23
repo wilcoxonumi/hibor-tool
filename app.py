@@ -6,89 +6,108 @@ from datetime import date
 
 # === 1. 页面基本配置 ===
 st.set_page_config(page_title="HKMA 数据", layout="wide")
-st.title("HKMA 金融数据提取工具")
+st.title("HKMA 数据提取")
 
-# === 2. 定义数据源配置 (核心修改点) ===
-# 以后如果想加新数据，就在这里加一行
+# === 2. 定义数据源配置 (官方链接) ===
 API_CONFIG = {
     "HIBOR (香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
         "segment": "hibor.fixing",
-        "date_col": "end_of_day",  # HIBOR API 返回的日期列名
-        "prefix": "ir",             # 用于识别数据列的前缀 (ir_1m, ir_3m...)
-        "title_en": "HIBOR Interest Rates - Daily"
+        "date_col": "end_of_day",
+        "title_en": "HIBOR Fixing Rates",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily/"
     },
     "RMB Deposit Rates (人民币存款利率)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr",
-        "segment": None,           # 这个API可能不需要segment参数，或者视具体文档而定
-        "date_col": "end_of_month", # 注意：存款利率通常是月度数据，日期列名可能不同
-        "prefix": "sav",            # 假设存款列包含 sav (savings) 或 term，稍后我们用自动识别
-        "title_en": "RMB Deposit Rates"
+        "segment": None,
+        "date_col": "end_of_month",
+        "title_en": "RMB Deposit Rates",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr/"
     },
     "Monetary Statistics (货币统计)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics",
-        "segment": None,            # 如果提取失败，可能需要指定 segment (如 'money_supply')，但通常可为空
-        "date_col": "end_of_month", # 货币统计通常是月度报告
-        "prefix": "m",              # 这里的 m 代表 Money Supply (M1, M2, M3)，主要用于标识
-        "title_en": "Monetary Statistics (M1/M2/M3)"
+        "segment": None,
+        "date_col": "end_of_month",
+        "title_en": "Monetary Statistics (M1/M2/M3)",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
+    },
+    "Exchange Rates & Interest Rates (汇率与利率综合)": {
+        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-exchange-rates-daily", 
+        "segment": None,
+        "date_col": "end_of_day",
+        "title_en": "Exchange Rates & Yields",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-exchange-rates-daily/"
     }
 }
 
-# === 3. 初始化 Session State ===
+# === 3. 核心元数据字典 (从 CSV 动态读取) ===
+@st.cache_data
+def load_variable_meta():
+    """读取 variable_config.csv 并转换为字典"""
+    try:
+        # 读取 CSV (适配 UTF-8)
+        df_meta = pd.read_csv("variable_config.csv")
+        
+        # 1. 清洗：删除 variable 为空的行 (防止空行报错)
+        df_meta = df_meta.dropna(subset=['variable'])
+        
+        # 2. 清洗：去除字符串两端的空格
+        df_meta['variable'] = df_meta['variable'].astype(str).str.strip()
+        
+        # 3. 转换为字典格式: {'m1_total': {'label': '...', 'unit': '...'}, ...}
+        # orient='index' 会将 'variable' 列作为 Key
+        meta_dict = df_meta.set_index('variable').to_dict(orient='index')
+        return meta_dict
+        
+    except FileNotFoundError:
+        st.warning("未找到 'variable_config.csv' 配置文件，将显示原始变量名。")
+        return {}
+    except Exception as e:
+        st.error(f"配置文件读取失败: {e}")
+        return {}
+
+# 加载配置
+VARIABLE_META = load_variable_meta()
+
+def get_display_info(var_name):
+    """辅助函数：获取变量的显示信息，如果字典里没有则返回原名"""
+    info = VARIABLE_META.get(var_name, {"label": var_name, "unit": ""})
+    # 处理可能的空值 (NaN)
+    if pd.isna(info.get('unit')): info['unit'] = ""
+    if pd.isna(info.get('label')): info['label'] = var_name
+    return info
+
+# === 4. 初始化 Session State ===
 if 'df_all' not in st.session_state:
     st.session_state['df_all'] = None
 if 'current_source' not in st.session_state:
     st.session_state['current_source'] = ""
 
-# === 4. 侧边栏：控制面板 ===
+# === 5. 侧边栏：控制面板 ===
 with st.sidebar:
     st.header("1. 数据源设置")
     
-    # [新增] 数据类型选择器
-    selected_source_name = st.selectbox(
-        "选择数据类型",
-        options=list(API_CONFIG.keys())
-    )
-    
-    # 获取当前选中的配置
+    selected_source_name = st.selectbox("选择数据类型", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     
     st.divider()
-    
     st.info(f"设置 {selected_source_name} 的抓取范围")
     
-    # === 关键设置 ===
-    # 1. 定义最早允许选到的日期 (比如 1990年，打破默认的10年限制)
+    # 允许最早选到 1990 年
     earliest_date = date(1990, 1, 1)
-    
-    # 2. 定义默认显示的日期 (保持你想要的“过去一年”)
     default_start = date(date.today().year - 1, 1, 1)
     
-    # 3. 应用到输入框
-    fetch_start = st.date_input(
-        "抓取开始日期", 
-        value=default_start,     # <--- 默认显示：去年 (User Experience Good)
-        min_value=earliest_date, # <--- 允许翻页：直到 1990 (Capability Good)
-        max_value=date.today()
-    )
+    fetch_start = st.date_input("抓取开始日期", value=default_start, min_value=earliest_date, max_value=date.today())
+    fetch_end = st.date_input("抓取结束日期", value=date.today(), min_value=earliest_date, max_value=date.today())
     
-    fetch_end = st.date_input(
-        "抓取结束日期", 
-        value=date.today(),
-        min_value=earliest_date,
-        max_value=date.today()
-    )
-    
-    # 按钮
-    fetch_btn = st.button("点击提取数据", type="primary")
+    fetch_btn = st.button("🚀 点击提取数据", type="primary")
 
-# === 5. 通用数据提取函数 (修复日期报错版) ===
+# === 6. 通用数据提取函数 (含清洗逻辑) ===
 @st.cache_data
 def fetch_hkma_data(api_url, segment, start_str, end_str):
     pagesize = 1000
     offset = 0
     all_records = []
-    
     placeholder = st.empty()
     
     target_start = pd.to_datetime(start_str)
@@ -96,42 +115,28 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     
     while True:
         placeholder.text(f"正在读取 HKMA 接口... Offset: {offset}")
-        
-        params = {
-            "pagesize": pagesize,
-            "offset": offset,
-            "from": start_str,
-            "to": end_str
-        }
-        if segment:
-            params["segment"] = segment
+        params = {"pagesize": pagesize, "offset": offset, "from": start_str, "to": end_str}
+        if segment: params["segment"] = segment
             
         try:
             response = requests.get(api_url, params=params)
             response.raise_for_status()
             data = response.json()
             records = data.get("result", {}).get("records", [])
-            
-            if not records:
-                break
-            
+            if not records: break
             all_records.extend(records)
             offset += pagesize
-            
         except Exception as e:
             st.error(f"API 请求失败: {e}")
             break
             
     placeholder.empty()
     
-    if not all_records:
-        return pd.DataFrame()
+    if not all_records: return pd.DataFrame()
     
     df = pd.DataFrame(all_records)
     
-    # === 关键修复位置 ===
-    
-    # 1. 自动寻找日期列
+    # === 关键数据清洗 ===
     date_col_found = None
     possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
     for col in possible_date_cols:
@@ -140,53 +145,23 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
             break
             
     if date_col_found:
-        # 2. 转为 datetime 格式 (这里加了 errors='coerce')
-        # 如果遇到无法解析的乱码或空值，它会变成 NaT (Not a Time)，而不会报错
+        # errors='coerce' 防止脏数据报错
         df[date_col_found] = pd.to_datetime(df[date_col_found], errors='coerce')
-        
-        # 2.1 [新增] 删除那些转换失败的行 (NaT)
-        # 这一步非常重要，防止后面作图时因为空时间报错
         df = df.dropna(subset=[date_col_found])
-        
-        # 3. 强制删除范围外的数据
+        # 再次过滤日期范围
         mask = (df[date_col_found] >= target_start) & (df[date_col_found] <= target_end)
-        df = df.loc[mask]
-        
-        # 4. 按日期排序
-        df = df.sort_values(date_col_found)
-        
-    return df
-    
-    # === 关键修复：Python 端强制二次过滤 ===
-    # 就算 API 返回了 1990 年的数据，这里也会在本地把它删掉
-    
-    # 1. 自动寻找日期列 (适配 HIBOR 和 存款利率)
-    date_col_found = None
-    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
-    for col in possible_date_cols:
-        if col in df.columns:
-            date_col_found = col
-            break
-            
-    if date_col_found:
-        # 2. 转为 datetime 格式
-        df[date_col_found] = pd.to_datetime(df[date_col_found])
-        
-        # 3. 【核心步骤】强制删除范围外的数据
-        mask = (df[date_col_found] >= target_start) & (df[date_col_found] <= target_end)
-        df = df.loc[mask]
-        
-        # 4. 按日期排序 (保证图表线条连贯)
-        df = df.sort_values(date_col_found)
+        df = df.loc[mask].sort_values(date_col_found)
         
     return df
 
-# === 6. 处理按钮逻辑 ===
+# === 7. 处理按钮逻辑 ===
 if fetch_btn:
-    # 如果切换了数据源，清除旧缓存
     if st.session_state['current_source'] != selected_source_name:
         st.session_state['df_all'] = None
         st.session_state['current_source'] = selected_source_name
+        # 切换数据源时重置作图日期
+        if 'plot_start' in st.session_state: del st.session_state.plot_start
+        if 'plot_end' in st.session_state: del st.session_state.plot_end
 
     with st.spinner(f'正在获取 {selected_source_name} 数据...'):
         df_new = fetch_hkma_data(
@@ -197,172 +172,136 @@ if fetch_btn:
         )
         
         if not df_new.empty:
-            # 自动标准化日期列：不管API返回 end_of_day 还是 end_of_month，都统一复制为 'date_obj' 用于作图
-            # 尝试查找可能的日期列名
             date_col_found = None
-            possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
-            
+            possible_date_cols = ['end_of_day', 'end_of_month', 'date']
             for col in possible_date_cols:
                 if col in df_new.columns:
                     date_col_found = col
                     break
             
             if date_col_found:
-                df_new['date_obj'] = pd.to_datetime(df_new[date_col_found])
-                df_new = df_new.sort_values('date_obj')
+                df_new['date_obj'] = df_new[date_col_found] # 创建统一的 date_obj 列用于作图
                 st.session_state['df_all'] = df_new
                 st.success(f"成功！获取了 {len(df_new)} 条记录。")
             else:
-                st.error(f"数据提取成功，但未找到日期列。可用列名: {list(df_new.columns)}")
+                st.error("未找到日期列。")
         else:
-            st.warning("未找到数据，请检查日期范围或网络。")
+            st.warning("未找到数据，请检查日期范围。")
 
-# === 7. 主界面展示 ===
+# === 8. 主界面展示 ===
 if st.session_state['df_all'] is not None:
     df = st.session_state['df_all']
+    current_config = API_CONFIG[st.session_state['current_source']]
     
     st.divider()
     
-    # --- 下载模块 ---
+    # --- 模块 2: 数据下载与说明 ---
     st.header(f"2. 数据下载: {st.session_state['current_source']}")
+    
+    # 显示官方链接
+    if "doc_url" in current_config:
+        st.markdown(f" **数据定义与来源:** [点击查看 HKMA 官方字段说明文档]({current_config['doc_url']})")
     
     col_d1, col_d2 = st.columns([1, 4])
     with col_d1:
-        # === 核心修改：创建专门用于下载的数据副本 ===
+        # 下载逻辑：保持原始变量名，但格式化日期
         df_download = df.copy()
         
-        # 1. 获取当前数据源的日期列名 (end_of_day 或 end_of_month)
-        current_config = API_CONFIG[st.session_state['current_source']]
-        date_col_name = current_config.get('date_col', 'end_of_day') 
+        date_col_name = current_config.get('date_col', 'end_of_day')
+        date_format = '%Y-%m' if 'month' in date_col_name.lower() else '%Y-%m-%d'
         
-        # 2. 智能判断格式
-        # 如果日期列名里包含 "month" (比如 end_of_month)，就只保留 "年-月"
-        if 'month' in date_col_name.lower():
-            date_format = '%Y-%m'  # 结果: 2025-12
-        else:
-            date_format = '%Y-%m-%d' # 结果: 2025-12-01 (去掉了 00:00:00)
-            
-        # 3. 应用格式化
-        # 确保该列存在，并且是 datetime 类型 (我们之前的 fetch 函数已经转好了)
         if date_col_name in df_download.columns:
-            # 使用 .dt.strftime 将日期对象转为指定格式的字符串
             df_download[date_col_name] = df_download[date_col_name].dt.strftime(date_format)
-            
-        # (可选) 如果 CSV 里还有 date_obj 这个辅助列，为了美观也统一格式化
         if 'date_obj' in df_download.columns:
-            df_download['date_obj'] = df_download['date_obj'].dt.strftime(date_format)
+            df_download = df_download.drop(columns=['date_obj']) # 移除辅助列
 
-        # 4. 生成 CSV
         csv = df_download.to_csv(index=False, encoding="utf-8-sig").encode('utf-8-sig')
         file_name = f"hkma_data_{fetch_start}_{fetch_end}.csv"
-        
         st.download_button("📥 下载 CSV", csv, file_name, "text/csv")
     
     with col_d2:
-        with st.expander("预览数据"):
-            # 预览时也显示格式化后的数据，体验更好
+        # 预览与字段说明
+        with st.expander("👁️ 预览数据 & 字段说明"):
+            st.subheader("前 5 行数据预览")
             st.dataframe(df_download.head())
+            
+            st.subheader("📋 本次抓取到的字段说明 (基于 variable_config.csv)")
+            # 动态生成说明表
+            meta_data_list = []
+            for col in df_download.columns:
+                if col in VARIABLE_META:
+                    info = VARIABLE_META[col]
+                    meta_data_list.append({
+                        "原始变量名": col,
+                        "中文描述": info['label'],
+                        "单位": info['unit']
+                    })
+            
+            if meta_data_list:
+                st.table(pd.DataFrame(meta_data_list))
+            else:
+                st.info("暂无字段说明，可能是 CSV 中未配置这些变量。")
 
-    # --- 作图模块 ---
-    st.header("3. 作图")
+    st.divider()
+
+    # --- 模块 3: 交互式分析 ---
+    st.header("3. 交互式分析")
     
-    # 1. 智能列过滤 (完整保留原逻辑)
-    # 排除掉 ID, Date 等非数值列
+    # 3.1 变量筛选
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
     plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
-    
-    # 兜底逻辑：如果没找到数值列，尝试找所有非日期列
     if not plot_options:
-        # 这里做了一点小优化，确保也不包含我们生成的 date_obj
-        plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
+         plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
 
-    # 2. 获取数据的时间边界
+    # 3.2 同步日期滑块
     min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
-
-    # --- 新增：初始化 Session State 用于双向同步 ---
-    if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d:
-        st.session_state.plot_start = min_d
-    if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d:
-        st.session_state.plot_end = max_d
+    if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d: st.session_state.plot_start = min_d
+    if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d: st.session_state.plot_end = max_d
         
-    # 回调函数：滑块拖动 -> 更新输入框
-    def update_inputs_from_slider():
-        st.session_state.plot_start = st.session_state.slider_range[0]
-        st.session_state.plot_end = st.session_state.slider_range[1]
+    def update_inputs(): st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
+    def update_slider(): st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
 
-    # 回调函数：输入框修改 -> 更新滑块
-    def update_slider_from_inputs():
-        if st.session_state.plot_start > st.session_state.plot_end:
-            st.error("开始日期不能晚于结束日期")
-        # 同步给滑块的 key
-        st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
-
-    # 3. 布局调整：改成三栏 [变量选择(宽) | 开始日期 | 结束日期]
+    # 3.3 布局
     col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
-    
     with col_sel:
+        # 下拉框：显示中文 + 原名
         selected_vars = st.multiselect(
             "选择变量 (Y轴)",
             options=plot_options,
+            format_func=lambda x: f"{get_display_info(x)['label']} ({x})",
             default=plot_options[:2] if len(plot_options) >= 2 else plot_options
         )
-    
-    with col_date1:
-        st.date_input(
-            "开始日期",
-            key="plot_start",
-            min_value=min_d,
-            max_value=max_d,
-            on_change=update_slider_from_inputs # 绑定回调
-        )
-        
-    with col_date2:
-        st.date_input(
-            "结束日期",
-            key="plot_end",
-            min_value=min_d,
-            max_value=max_d,
-            on_change=update_slider_from_inputs # 绑定回调
-        )
+    with col_date1: st.date_input("开始日期", key="plot_start", min_value=min_d, max_value=max_d, on_change=update_slider)
+    with col_date2: st.date_input("结束日期", key="plot_end", min_value=min_d, max_value=max_d, on_change=update_slider)
+    st.slider("快速拖拽区间", min_value=min_d, max_value=max_d, value=(st.session_state.plot_start, st.session_state.plot_end), key="slider_range", on_change=update_inputs)
 
-    # 4. 布局：下方长滑块 (快速拖拽)
-    st.slider(
-        "快速拖拽调整区间",
-        min_value=min_d,
-        max_value=max_d,
-        value=(st.session_state.plot_start, st.session_state.plot_end),
-        key="slider_range",
-        on_change=update_inputs_from_slider # 绑定回调
-    )
-
-    # 5. 作图执行
+    # 3.4 作图
     if selected_vars:
-        # 使用 session_state 中的精确日期进行过滤
-        current_start = st.session_state.plot_start
-        current_end = st.session_state.plot_end
-        
+        current_start, current_end = st.session_state.plot_start, st.session_state.plot_end
         mask = (df['date_obj'].dt.date >= current_start) & (df['date_obj'].dt.date <= current_end)
         plot_df = df.loc[mask]
         
         if plot_df.empty:
-            st.warning("所选时间段内没有数据。")
+            st.warning("该时间段无数据。")
         else:
             fig, ax = plt.subplots(figsize=(12, 5))
-            
             for col in selected_vars:
-                # 核心防错：强制转数字
                 series = pd.to_numeric(plot_df[col], errors='coerce')
-                # 核心修改：去掉 marker='o'，线条更平滑
-                ax.plot(plot_df['date_obj'], series, label=col, linewidth=1.5)
                 
-            # 核心修改：使用英文标题 (从 API_CONFIG 读取)
-            # 使用 .get 方法防止未来加了新API忘记写 title_en 导致报错
-            current_config = API_CONFIG[st.session_state['current_source']]
-            ax.set_title(current_config.get('title_en', 'Data Trends'))
+                # 图例：中文描述 + 单位
+                info = get_display_info(col)
+                legend_label = f"{info['label']}"
+                if info['unit']:
+                    legend_label += f" ({info['unit']})"
+                
+                ax.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5)
             
+            ax.set_title(current_config.get('title_en', 'Data Trends'))
             ax.legend()
             ax.grid(True, linestyle='--', alpha=0.6)
             st.pyplot(fig)
     else:
-        st.info("请选择至少一个变量进行作图。")
+        st.info("请选择变量。")
+elif not fetch_btn:
+    st.info(" 请先在左侧提取数据。")
