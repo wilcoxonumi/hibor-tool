@@ -271,3 +271,4 @@ if st.session_state['df_all'] is not None:
         st.info("请选择至少一个变量进行作图。")
 elif not fetch_btn:
     st.info("👈 请先在左侧提取数据。")
+    
