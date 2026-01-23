@@ -1,4 +1,5 @@
-﻿variable,type,unit,label
+variable_config
+variable,type,unit,label
 end_of_month,日期,,
 notes_coins_circulation,数字,百万港元,货币基础:流通纸币及硬币
 aggr_balance,数字,百万港元,货币基础:总结余
@@ -11,7 +12,7 @@ m2_hkd,数字,百万港元,货币供应量:M2港元
 m3_total,数字,百万港元,货币供应量:M3总计
 m3_hkd,数字,百万港元,货币供应量:M3港元
 exrate_hkd_usd,数字,年率,汇率:每美元兑港元
-nominal_eff_exrate_index,数字,年率,汇率:名义港汇指数(01.2010 = 100)
+nominal_eff_exrate_index,数字,年率,汇率:名义港汇指数(01.2010=100)
 hibor_fixing_overnight,数字,年率,隔夜HIBOR
 hibor_fixing_3m,数字,年率,3个月HIBOR
 deposit_rate_saving,数字,年率,储蓄存款利率
@@ -21,17 +22,16 @@ yield_govbond_10y,数字,年率,10年政府债券收益率
 best_lending_rate,数字,年率,最优惠贷款利率
 discount_window_base_rate,数字,年率,贴现窗基本利率
 end_of_day,日期,,当日早上11时15分
-ir_overnight,数字,年率,隔夜
-ir_1w,数字,年率,1星期
-ir_1m,数字,年率,1个月
-ir_3m,数字,年率,3个月
-ir_6m,数字,年率,6个月
-ir_9m,数字,年率,9个月
-ir_12m,数字,年率,12个月
+ir_overnight,数字,年率,隔夜HIBOR
+ir_1w,数字,年率,1星期HIBOR
+ir_1m,数字,年率,1个月HIBOR
+ir_3m,数字,年率,3个月HIBOR
+ir_6m,数字,年率,6个月HIBOR
+ir_9m,数字,年率,9个月HIBOR
+ir_12m,数字,年率,12个月HIBOR
 deposit_rate_1w,数字,年率,1星期少于10万元人民币的存款利率
 deposit_rate_1m,数字,年率,1个月少于10万元人民币的存款利率
 deposit_rate_3m,数字,年率,3个月少于10万元人民币的存款利率
 deposit_rate_6m,数字,年率,6个月少于10万元人民币的存款利率
 deposit_rate_12m,数字,年率,12个月少于10万元人民币的存款利率
 savings_deposit_rate,数字,年率,储蓄存款利率(少于10万元人民币的存款利率)
-,,,
