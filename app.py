@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm # <--- 引入字体管理器
+import matplotlib.font_manager as fm 
 import os
 from datetime import date
 
@@ -150,7 +150,7 @@ if fetch_btn:
             else:
                 st.error("未找到日期列。")
         else:
-            st.warning("未找到数据，请检查日期范围。")
+            st.warning("未找到数据，检查日期范围。")
 
 # === 8. 主界面展示 ===
 if st.session_state['df_all'] is not None:
@@ -191,8 +191,8 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-    # --- 作图模块 (含字体修复) ---
-    st.header("3. 交互式分析")
+    # --- 作图模块 (加了字体) ---
+    st.header("3. 作图")
     
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
@@ -229,17 +229,17 @@ if st.session_state['df_all'] is not None:
         else:
             fig, ax = plt.subplots(figsize=(12, 5))
             
-            # === 💡 字体加载逻辑 (核心修改) ===
+            #  字体
             # 检测本地是否有 SimHei.ttf (黑体)
             my_font = None
-            font_path = "SimHei.ttf" # 确保这个文件在目录下
+            font_path = "SimHei.ttf" # 确保文件在目录下
             
             if os.path.exists(font_path):
-                # 如果找到了文件，直接创建字体对象
+                # 
                 my_font = fm.FontProperties(fname=font_path)
             else:
-                # 没找到文件，尝试系统回退 
-                st.warning(" 未检测到 'SimHei.ttf' 字体文件，中文可能无法显示。建议上传字体文件到项目根目录。")
+                # 没找到文件，尝试回退 
+                st.warning(" 未检测到 'SimHei.ttf' 字体文件，中文无法显示。上传字体文件到目录。")
                 plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
             
             for col in selected_vars:
@@ -250,13 +250,13 @@ if st.session_state['df_all'] is not None:
                 
                 ax.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5)
             
-            # 应用字体到标题和图例
+            # 
             title_text = current_config.get('title_en', 'Data Trends')
             
-            # 如果加载了自定义字体，就应用它
+            # 
             if my_font:
                 ax.set_title(title_text, fontproperties=my_font)
-                ax.legend(prop=my_font) # <--- 关键：图例使用中文字体
+                ax.legend(prop=my_font) # 关键：图例使用中文字体
             else:
                 ax.set_title(title_text)
                 ax.legend()
