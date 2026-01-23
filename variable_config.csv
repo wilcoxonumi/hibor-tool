@@ -1,4 +1,5 @@
-﻿end_of_month,日期,,
+﻿variable,type,unit,label
+end_of_month,日期,,
 notes_coins_circulation,数字,百万港元,货币基础:流通纸币及硬币
 aggr_balance,数字,百万港元,货币基础:总结余
 ef_bills_notes,数字,百万港元,货币基础:外汇基金票据及债券
