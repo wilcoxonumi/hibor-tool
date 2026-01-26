@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm # <--- 引入字体管理器
+import matplotlib.font_manager as fm 
 import os
 from datetime import date
 import matplotlib.ticker as mticker
@@ -11,7 +11,7 @@ import matplotlib.ticker as mticker
 st.set_page_config(page_title="HKMA 数据", layout="wide")
 st.title("HKMA 金融数据提取工具")
 
-# === 2. 定义数据源配置 ===
+# === 2. 定义数据源配置 (新增了第 4 项) ===
 API_CONFIG = {
     "HIBOR (香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
@@ -19,6 +19,14 @@ API_CONFIG = {
         "date_col": "end_of_day",
         "title_en": "HIBOR Interest Rates - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily/"
+    },
+    "Exchange Fund Bills & Notes (外汇基金票据及债券收益率)": {
+        # 
+        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/efbn/efbn-yield-daily",
+        "segment": None, # 这个接口通常不需要 segment 参数
+        "date_col": "end_of_day",
+        "title_en": "Exchange Fund Bills & Notes Yields - Daily",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/efbn/efbn-yield-daily/"
     },
     "RMB Deposit Rates (人民币存款利率)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr",
@@ -63,7 +71,7 @@ if 'current_source' not in st.session_state:
 # === 5. 侧边栏：控制面板 ===
 with st.sidebar:
     st.header("1. 数据源设置")
-    selected_source_name = st.selectbox("选择数据类型", options=list(API_CONFIG.keys()))
+    selected_source_name = st.selectbox("选择数据", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     st.divider()
     
@@ -258,9 +266,9 @@ if st.session_state['df_all'] is not None:
         else:
             fig, ax = plt.subplots(figsize=(12, 6)) # 高度稍微增加一点
             
-            # === A. 智能分拣: 谁走左轴，谁走右轴 (适配中文配置) ===
-            primary_vars = []   # 左轴 (通常是金额)
-            secondary_vars = [] # 右轴 (通常是利率)
+            # === A. 左轴or右轴 (适配中文配置) ===
+            primary_vars = []   # 左轴 (usually金额)
+            secondary_vars = [] # 右轴 (usually利率)
             
             for col in selected_vars:
                 info = get_display_info(col)
@@ -268,7 +276,7 @@ if st.session_state['df_all'] is not None:
                 unit = str(info.get('unit', '')).lower()
                 label = str(info.get('label', '')).lower()
                 
-                # 判断规则: 如果单位包含 '年率'/'%' 或 名字包含 '利率'/'hibor'/'汇率'/'指数'
+                # 判断规则: 
                 is_rate = (
                     '年率' in unit or 
                     '%' in unit or 
@@ -284,7 +292,7 @@ if st.session_state['df_all'] is not None:
                 else:
                     primary_vars.append(col)
             
-            # 特殊情况处理：如果全是利率，或者全是金额，就强制用单轴 (没必要双轴)
+            # 特殊情况处理：如果全是利率，或者全是金额，就强制用单轴 
             if not primary_vars and secondary_vars:
                 primary_vars = secondary_vars
                 secondary_vars = []
@@ -369,4 +377,4 @@ if st.session_state['df_all'] is not None:
         st.info("请选择变量。")
 
 elif not fetch_btn:
-    st.info("👈 请先在左侧提取数据。")
+    st.info(" 请先在左侧提取数据。")
