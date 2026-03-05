@@ -208,7 +208,7 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-# --- 作图模块 (修改版：修复变量缺失问题) ---
+# --- 作图模块 (终极修正版：修复 id 误杀 和 空格匹配) ---
     st.header("3. 作图")
     
     # 1. 引入必要的库
@@ -216,29 +216,24 @@ if st.session_state['df_all'] is not None:
     import os
     import matplotlib.font_manager as fm
 
-    # === ✨ 核心修改开始：优化列筛选逻辑 ✨ ===
     # 2. 列筛选逻辑
     
-    # 2.1 预处理：尝试将所有非日期列转为数字 
-    # (解决 API 返回 "+0", "-527" 这种字符串数字被当成文本过滤掉的问题)
+    # 2.1 强制转数字 (处理 "+0" 等字符串)
     ignore_cols = ['date_obj', 'end_of_day', 'end_of_month', 'end_of_date', 'date']
     for col in df.columns:
         if col not in ignore_cols:
-            # errors='coerce' 意思是：如果能转成数字就转，转不了(比如纯文字)就变成 NaN
-            # 这样 "+0" 就会变成数字 0
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # 2.2 筛选数字列 (现在 market_activities 等变成了数字，就能被选出来了)
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     
-    # 2.3 排除垃圾关键词 
-    # (注意：我去掉了 'day'，因为你的数据里有 'intraday'，不能误杀它！)
-    exclude_keywords = ['id', 'rec_count'] # 模糊匹配：只要包含这些词就排除
-    exclude_exact = ['year', 'month', 'day'] # 精确匹配：只有完全等于这些词才排除
+    # 2.2 排除逻辑 (关键修复：精确匹配 id)
+    # 之前的 'id' 会误杀 'cu_weakside' (里面有id)，现在改为只排除 'rec_id' 或完全等于 'id'
+    exclude_keywords = ['rec_count', 'rec_id'] 
+    exclude_exact = ['year', 'month', 'day', 'id'] # <--- id 移到这里，必须完全相等才排除
     
     plot_options = []
     for c in numeric_cols:
-        c_lower = c.lower()
+        c_lower = c.strip().lower() # 去空格再对比
         is_excluded = False
         
         # 规则 A: 包含特定垃圾关键词
@@ -249,25 +244,20 @@ if st.session_state['df_all'] is not None:
         if not is_excluded:
             plot_options.append(c)
     
-    # 兜底：如果没筛出来，就排除掉日期列剩下的都算
+    # 兜底
     if not plot_options:
          plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month', 'end_of_date']]
-    # === ✨ 核心修改结束 ✨ ===
 
     # 3. 日期滑块与输入框的双向同步
     min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
     
-    # 初始化 Session State
     if 'plot_start' not in st.session_state or st.session_state.plot_start < min_d: 
         st.session_state.plot_start = min_d
     if 'plot_end' not in st.session_state or st.session_state.plot_end > max_d: 
         st.session_state.plot_end = max_d
         
-    # 回调函数
-    def update_inputs(): 
-        st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
-    def update_slider(): 
-        st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
+    def update_inputs(): st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
+    def update_slider(): st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
 
     # 4. 布局控制
     col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
@@ -275,22 +265,12 @@ if st.session_state['df_all'] is not None:
         selected_vars = st.multiselect(
             "选择变量 (Y轴)",
             options=plot_options,
-            format_func=lambda x: f"{get_display_info(x)['label']} ({x})", # 显示中文 Label
+            format_func=lambda x: f"{get_display_info(x)['label']} ({x})",
             default=plot_options[:2] if len(plot_options) >= 2 else plot_options
         )
-    with col_date1: 
-        st.date_input("开始日期", key="plot_start", min_value=min_d, max_value=max_d, on_change=update_slider)
-    with col_date2: 
-        st.date_input("结束日期", key="plot_end", min_value=min_d, max_value=max_d, on_change=update_slider)
-    
-    st.slider(
-        "快速拖拽区间", 
-        min_value=min_d, 
-        max_value=max_d, 
-        value=(st.session_state.plot_start, st.session_state.plot_end), 
-        key="slider_range", 
-        on_change=update_inputs
-    )
+    with col_date1: st.date_input("开始日期", key="plot_start", min_value=min_d, max_value=max_d, on_change=update_slider)
+    with col_date2: st.date_input("结束日期", key="plot_end", min_value=min_d, max_value=max_d, on_change=update_slider)
+    st.slider("快速拖拽区间", min_value=min_d, max_value=max_d, value=(st.session_state.plot_start, st.session_state.plot_end), key="slider_range", on_change=update_inputs)
 
     # 5. 开始作图
     if selected_vars:
@@ -301,93 +281,52 @@ if st.session_state['df_all'] is not None:
         if plot_df.empty:
             st.warning("该时段无数据。")
         else:
-            fig, ax = plt.subplots(figsize=(12, 6)) # 高度稍微增加一点
+            fig, ax = plt.subplots(figsize=(12, 6))
             
-            # === A. 智能分拣: 谁走左轴，谁走右轴 (适配中文配置) ===
-            primary_vars = []   # 左轴 (通常是金额)
-            secondary_vars = [] # 右轴 (通常是利率)
+            # === A. 智能分拣 (这里也加个 strip 以防万一) ===
+            primary_vars = []
+            secondary_vars = []
             
             for col in selected_vars:
                 info = get_display_info(col)
-                # 安全获取字符串并转小写
                 unit = str(info.get('unit', '')).lower()
                 label = str(info.get('label', '')).lower()
                 
-                # 判断规则: 如果单位包含 '年率'/'%' 或 名字包含 '利率'/'hibor'/'汇率'/'指数'
-                is_rate = (
-                    '年率' in unit or 
-                    '%' in unit or 
-                    '利率' in label or 
-                    '收益率' in label or 
-                    '汇率' in label or 
-                    'hibor' in label or
-                    '指数' in label
-                )
+                is_rate = ('年率' in unit or '%' in unit or '利率' in label or '收益率' in label or '汇率' in label or 'hibor' in label or '指数' in label)
                 
-                if is_rate:
-                    secondary_vars.append(col)
-                else:
-                    primary_vars.append(col)
+                if is_rate: secondary_vars.append(col)
+                else: primary_vars.append(col)
             
-            # 特殊情况处理：如果全是利率，或者全是金额，就强制用单轴 (没必要双轴)
             if not primary_vars and secondary_vars:
                 primary_vars = secondary_vars
                 secondary_vars = []
             
-            # === B. 字体加载 (本地文件优先) ===
+            # === B. 字体与绘图 ===
             my_font = None
-            font_path = "SimHei.ttf" # 确保 SimHei.ttf 在同级目录下
-            if os.path.exists(font_path):
-                my_font = fm.FontProperties(fname=font_path)
-            else:
-                # 本地调试回退方案
-                plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
+            font_path = "SimHei.ttf"
+            if os.path.exists(font_path): my_font = fm.FontProperties(fname=font_path)
+            else: plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
 
-            # === C. 辅助绘图函数 (统一画线逻辑) ===
             def plot_lines(axes, vars_list, is_secondary=False):
                 lines = []
                 for col in vars_list:
-                    # 注意：这里也加了 errors='coerce'，确保万无一失
                     series = pd.to_numeric(plot_df[col], errors='coerce')
                     info = get_display_info(col)
-                    
-                    # 图例显示: 双轴时右轴加个标记
                     axis_tag = "(右轴)" if is_secondary else ""
                     legend_label = f"{info['label']} {axis_tag}"
-                    # 只有当单位不为空时才显示单位
-                    if info['unit']: 
-                        legend_label += f" ({info['unit']})"
-                    
-                    # 右轴用虚线，左轴用实线，方便区分
-                    linestyle = '--' if is_secondary else '-' 
-                    
-                    line, = axes.plot(
-                        plot_df['date_obj'], 
-                        series, 
-                        label=legend_label, 
-                        linewidth=1.5, 
-                        linestyle=linestyle
-                    )
+                    if info['unit']: legend_label += f" ({info['unit']})"
+                    linestyle = '--' if is_secondary else '-'
+                    line, = axes.plot(plot_df['date_obj'], series, label=legend_label, linewidth=1.5, linestyle=linestyle)
                     lines.append(line)
                 return lines
 
-            # === D. 执行画图 ===
-            
-            # 1. 画左轴
             lines_1 = plot_lines(ax, primary_vars, is_secondary=False)
-            # ax.set_ylabel("金额 / 数值", fontproperties=my_font) # 可选：设置左轴标签
-
-            # 2. 画右轴 (如果有的话)
             lines_2 = []
             if secondary_vars:
-                ax2 = ax.twinx() # 创建共享X轴的第二个Y轴
+                ax2 = ax.twinx()
                 lines_2 = plot_lines(ax2, secondary_vars, is_secondary=True)
-                # ax2.set_ylabel("利率 (%)", fontproperties=my_font) # 可选：设置右轴标签
-                
-                # 右轴格式化: 强制保留2位小数 (4.50)
                 ax2.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: f"{x:.2f}"))
             
-            # === E. 统一图例 (把左右轴的线合在一个图例框里) ===
             all_lines = lines_1 + lines_2
             all_labels = [l.get_label() for l in all_lines]
             
@@ -398,17 +337,12 @@ if st.session_state['df_all'] is not None:
                 ax.legend(all_lines, all_labels, loc='upper left')
                 ax.set_title(current_config.get('title_en', 'Data Trends'))
 
-            # === F. 左轴格式化 (千分位 + 智能小数) ===
             def human_format_left(x, pos):
-                # 0 就显示 0
                 if x == 0: return "0"
-                # 小数 (如 HIBOR 单轴显示时)，保留2位
                 if abs(x) < 1000: return f"{x:.2f}"
-                # 大数 (如 M1)，用千分位逗号，不带小数
                 return f"{x:,.0f}"
             
             ax.yaxis.set_major_formatter(mticker.FuncFormatter(human_format_left))
-            
             ax.grid(True, linestyle=':', alpha=0.6)
             st.pyplot(fig)
     else:
