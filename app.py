@@ -46,7 +46,7 @@ API_CONFIG = {
         # === ✨ 新增的接口 ✨ ===
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity",
         "segment": None, 
-        "date_col": "end_of_day",
+        "date_col": "end_of_date",
         "title_en": "Interbank Liquidity - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity/"
     }
