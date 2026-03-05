@@ -208,7 +208,7 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-    # --- 作图模块 ---
+# --- 作图模块 (修改版：修复变量缺失问题) ---
     st.header("3. 作图")
     
     # 1. 引入必要的库
@@ -216,14 +216,43 @@ if st.session_state['df_all'] is not None:
     import os
     import matplotlib.font_manager as fm
 
+    # === ✨ 核心修改开始：优化列筛选逻辑 ✨ ===
     # 2. 列筛选逻辑
+    
+    # 2.1 预处理：尝试将所有非日期列转为数字 
+    # (解决 API 返回 "+0", "-527" 这种字符串数字被当成文本过滤掉的问题)
+    ignore_cols = ['date_obj', 'end_of_day', 'end_of_month', 'end_of_date', 'date']
+    for col in df.columns:
+        if col not in ignore_cols:
+            # errors='coerce' 意思是：如果能转成数字就转，转不了(比如纯文字)就变成 NaN
+            # 这样 "+0" 就会变成数字 0
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # 2.2 筛选数字列 (现在 market_activities 等变成了数字，就能被选出来了)
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    exclude_keywords = ['id', 'year', 'month', 'day', 'rec_count']
-    plot_options = [c for c in numeric_cols if not any(k in c.lower() for k in exclude_keywords)]
+    
+    # 2.3 排除垃圾关键词 
+    # (注意：我去掉了 'day'，因为你的数据里有 'intraday'，不能误杀它！)
+    exclude_keywords = ['id', 'rec_count'] # 模糊匹配：只要包含这些词就排除
+    exclude_exact = ['year', 'month', 'day'] # 精确匹配：只有完全等于这些词才排除
+    
+    plot_options = []
+    for c in numeric_cols:
+        c_lower = c.lower()
+        is_excluded = False
+        
+        # 规则 A: 包含特定垃圾关键词
+        if any(k in c_lower for k in exclude_keywords): is_excluded = True
+        # 规则 B: 精确等于某些词
+        if c_lower in exclude_exact: is_excluded = True
+        
+        if not is_excluded:
+            plot_options.append(c)
     
     # 兜底：如果没筛出来，就排除掉日期列剩下的都算
     if not plot_options:
-         plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month']]
+         plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month', 'end_of_date']]
+    # === ✨ 核心修改结束 ✨ ===
 
     # 3. 日期滑块与输入框的双向同步
     min_d, max_d = df['date_obj'].min().date(), df['date_obj'].max().date()
@@ -274,9 +303,9 @@ if st.session_state['df_all'] is not None:
         else:
             fig, ax = plt.subplots(figsize=(12, 6)) # 高度稍微增加一点
             
-            # === A. 左轴or右轴 (适配中文配置) ===
-            primary_vars = []   # 左轴 (usually金额)
-            secondary_vars = [] # 右轴 (usually利率)
+            # === A. 智能分拣: 谁走左轴，谁走右轴 (适配中文配置) ===
+            primary_vars = []   # 左轴 (通常是金额)
+            secondary_vars = [] # 右轴 (通常是利率)
             
             for col in selected_vars:
                 info = get_display_info(col)
@@ -284,7 +313,7 @@ if st.session_state['df_all'] is not None:
                 unit = str(info.get('unit', '')).lower()
                 label = str(info.get('label', '')).lower()
                 
-                # 判断规则: 
+                # 判断规则: 如果单位包含 '年率'/'%' 或 名字包含 '利率'/'hibor'/'汇率'/'指数'
                 is_rate = (
                     '年率' in unit or 
                     '%' in unit or 
@@ -300,7 +329,7 @@ if st.session_state['df_all'] is not None:
                 else:
                     primary_vars.append(col)
             
-            # 特殊情况处理：如果全是利率，或者全是金额，就强制用单轴 
+            # 特殊情况处理：如果全是利率，或者全是金额，就强制用单轴 (没必要双轴)
             if not primary_vars and secondary_vars:
                 primary_vars = secondary_vars
                 secondary_vars = []
@@ -318,6 +347,7 @@ if st.session_state['df_all'] is not None:
             def plot_lines(axes, vars_list, is_secondary=False):
                 lines = []
                 for col in vars_list:
+                    # 注意：这里也加了 errors='coerce'，确保万无一失
                     series = pd.to_numeric(plot_df[col], errors='coerce')
                     info = get_display_info(col)
                     
@@ -385,4 +415,4 @@ if st.session_state['df_all'] is not None:
         st.info("请选择变量。")
 
 elif not fetch_btn:
-    st.info(" 请先在左侧提取数据。")
+    st.info("👈 请先在左侧提取数据。")
