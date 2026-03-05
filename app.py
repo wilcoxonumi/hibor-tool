@@ -41,6 +41,14 @@ API_CONFIG = {
         "date_col": "end_of_month",
         "title_en": "Monetary Statistics",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
+    },
+    "Interbank Liquidity (银行同业流动资金)": {
+        # === ✨ 新增的接口 ✨ ===
+        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity",
+        "segment": None, 
+        "date_col": "end_of_day",
+        "title_en": "Interbank Liquidity - Daily",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity/"
     }
 }
 
