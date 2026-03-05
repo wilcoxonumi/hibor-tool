@@ -82,6 +82,12 @@ with st.sidebar:
     selected_source_name = st.selectbox("选择数据", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     st.divider()
+    # ... 你的其他侧边栏代码 ...
+    
+    # === ✨ 新增：强制清除缓存按钮 ✨ ===
+    if st.button("🔄 强制更新配置/清除缓存"):
+        st.cache_data.clear()
+        st.rerun()
     
     st.info(f"设置 {selected_source_name} 的抓取范围")
     earliest_date = date(1990, 1, 1)
