@@ -123,7 +123,7 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     df = pd.DataFrame(all_records)
     
     date_col_found = None
-    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date']
+    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date','end_of_date']
     for col in possible_date_cols:
         if col in df.columns:
             date_col_found = col
