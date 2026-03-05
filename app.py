@@ -11,7 +11,7 @@ import matplotlib.ticker as mticker
 st.set_page_config(page_title="HKMA 数据", layout="wide")
 st.title("HKMA 金融数据提取工具")
 
-# === 2. 定义数据源配置 (新增了第 4 项) ===
+# === 2. 定义数据源配置 ===
 API_CONFIG = {
     "HIBOR (香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
@@ -84,8 +84,8 @@ with st.sidebar:
     st.divider()
     # ... 你的其他侧边栏代码 ...
     
-    # === ✨ 新增：强制清除缓存按钮 ✨ ===
-    if st.button("🔄 强制更新配置/清除缓存"):
+    # === 新增：强制清除缓存按钮  ===
+    if st.button("强制更新配置/清除缓存"):
         st.cache_data.clear()
         st.rerun()
     
