@@ -155,7 +155,7 @@ if fetch_btn:
         
         if not df_new.empty:
             date_col_found = None
-            possible_date_cols = ['end_of_day', 'end_of_month', 'date']
+            possible_date_cols = ['end_of_day', 'end_of_month', 'date','end_of_date']
             for col in possible_date_cols:
                 if col in df_new.columns:
                     date_col_found = col
