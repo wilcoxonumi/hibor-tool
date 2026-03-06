@@ -43,7 +43,7 @@ API_CONFIG = {
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
     },
     "Interbank Liquidity (银行同业流动资金)": {
-        # === ✨ 新增的接口 ✨ ===
+        # === try 新增接口 ===
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity",
         "segment": None, 
         "date_col": "end_of_date",
@@ -101,10 +101,9 @@ with st.sidebar:
     selected_source_name = st.selectbox("选择数据", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     st.divider()
-    # ... 你的其他侧边栏代码 ...
     
     # === 新增：强制清除缓存按钮  ===
-    if st.button("强制更新配置/清除缓存"):
+    if st.button("强制清除缓存"):
         st.cache_data.clear()
         st.rerun()
     
@@ -162,7 +161,7 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         
     return df
 
-# === 7. 执行提取逻辑 (升级版：支持单接口 & 多接口自动合并) ===
+# === 7. 执行提取逻辑 (单接口 & 多接口自动合并) ===
 if fetch_btn:
     # 1. 重置状态 (切换数据源时)
     if st.session_state['current_source'] != selected_source_name:
@@ -174,7 +173,7 @@ if fetch_btn:
     # 2. 准备抓取目标 (兼容 String 和 List)
     target_urls = current_config['url']
     if not isinstance(target_urls, list):
-        target_urls = [target_urls] # 变成列表，方便统一处理
+        target_urls = [target_urls] # 变成列表，方便处理
 
     final_df = pd.DataFrame()
     success_count = 0
@@ -232,7 +231,7 @@ if fetch_btn:
         final_df = final_df.sort_values('date_obj')
         
         st.session_state['df_all'] = final_df
-        st.success(f" 成功获取数据！(共合并 {success_count} 个接口，{len(final_df)} 行记录)")
+        st.success(f" 成功获取数据 (共合并 {success_count} 个接口，{len(final_df)} 行记录)")
     else:
         if success_count == 0:
             st.warning("未找到有效数据，请检查日期范围。")
@@ -278,10 +277,10 @@ if st.session_state['df_all'] is not None:
                     meta_data_list.append({"原始变量": col, "中文描述": info['label'], "单位": info['unit']})
             if meta_data_list: st.table(pd.DataFrame(meta_data_list))
 
-# --- 作图模块 (终极修正版：修复 id 误杀 和 空格匹配) ---
+# --- 作图模块 (修复 id 误删 和 空格匹配) ---
     st.header("3. 作图")
     
-    # 1. 引入必要的库
+    # 1. 引入库
     import matplotlib.ticker as mticker
     import os
     import matplotlib.font_manager as fm
@@ -297,9 +296,8 @@ if st.session_state['df_all'] is not None:
     numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
     
     # 2.2 排除逻辑 (关键修复：精确匹配 id)
-    # 之前的 'id' 会误杀 'cu_weakside' (里面有id)，现在改为只排除 'rec_id' 或完全等于 'id'
     exclude_keywords = ['rec_count', 'rec_id'] 
-    exclude_exact = ['year', 'month', 'day', 'id'] # <--- id 移到这里，必须完全相等才排除
+    exclude_exact = ['year', 'month', 'day', 'id'] # 必须完全相等才排除
     
     plot_options = []
     for c in numeric_cols:
@@ -314,7 +312,7 @@ if st.session_state['df_all'] is not None:
         if not is_excluded:
             plot_options.append(c)
     
-    # 兜底
+    # 
     if not plot_options:
          plot_options = [c for c in df.columns if c != 'date_obj' and c not in ['end_of_day', 'end_of_month', 'end_of_date']]
 
@@ -329,7 +327,7 @@ if st.session_state['df_all'] is not None:
     def update_inputs(): st.session_state.plot_start, st.session_state.plot_end = st.session_state.slider_range
     def update_slider(): st.session_state.slider_range = (st.session_state.plot_start, st.session_state.plot_end)
 
-    # 4. 布局控制
+    # 4. 布局
     col_sel, col_date1, col_date2 = st.columns([2, 1, 1])
     with col_sel:
         selected_vars = st.multiselect(
@@ -353,7 +351,7 @@ if st.session_state['df_all'] is not None:
         else:
             fig, ax = plt.subplots(figsize=(12, 6))
             
-            # === A. 智能分拣 (这里也加个 strip 以防万一) ===
+            # === A. 这里加个 strip 以防万一 ===
             primary_vars = []
             secondary_vars = []
             
@@ -419,4 +417,4 @@ if st.session_state['df_all'] is not None:
         st.info("请选择变量。")
 
 elif not fetch_btn:
-    st.info("👈 请先在左侧提取数据。")
+    st.info(" 请先在左侧提取数据。")
