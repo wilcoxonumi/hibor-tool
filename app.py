@@ -49,6 +49,25 @@ API_CONFIG = {
         "date_col": "end_of_date",
         "title_en": "Interbank Liquidity - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity/"
+    },
+    # === 新增：银行体系 (multiple api) ===
+    "Banking Statistics (银行体系 - 综合数据)": {
+        # 列表 List []，放多个 api
+        "url": [
+            # 3.2 客户存款 (按货币)
+            "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/customer-deposits-by-currency",
+            # 3.3.1 客户存款 (按类别-港元及外币存款)
+            "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/customer-deposits-by-type-hkd-fc",
+            # 3.6.1 资产质素-认可机构
+            "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/assetquality-ais",
+            # 3.9.2 资产负债表-持牌银行
+            "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/balance-sheet-lb",
+            # ... 在这里继续添加 3.5, 3.6 等链接 ...
+        ],
+        "segment": None,
+        "date_col": "end_of_month", # check一下日期名
+        "title_en": "Banking Statistics (Integrated)",
+        "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/banking/"
     }
 }
 
@@ -143,37 +162,82 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         
     return df
 
-# === 7. 执行提取逻辑 ===
+# === 7. 执行提取逻辑 (升级版：支持单接口 & 多接口自动合并) ===
 if fetch_btn:
+    # 1. 重置状态 (切换数据源时)
     if st.session_state['current_source'] != selected_source_name:
         st.session_state['df_all'] = None
         st.session_state['current_source'] = selected_source_name
         if 'plot_start' in st.session_state: del st.session_state.plot_start
         if 'plot_end' in st.session_state: del st.session_state.plot_end
 
+    # 2. 准备抓取目标 (兼容 String 和 List)
+    target_urls = current_config['url']
+    if not isinstance(target_urls, list):
+        target_urls = [target_urls] # 变成列表，方便统一处理
+
+    final_df = pd.DataFrame()
+    success_count = 0
+    
+    # 3. 进度提示
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
     with st.spinner(f'正在获取 {selected_source_name} 数据...'):
-        df_new = fetch_hkma_data(
-            current_config['url'],
-            current_config['segment'],
-            fetch_start.strftime("%Y-%m-%d"),
-            fetch_end.strftime("%Y-%m-%d")
-        )
         
-        if not df_new.empty:
-            date_col_found = None
-            possible_date_cols = ['end_of_day', 'end_of_month', 'date','end_of_date']
-            for col in possible_date_cols:
-                if col in df_new.columns:
-                    date_col_found = col
-                    break
-            if date_col_found:
-                df_new['date_obj'] = df_new[date_col_found]
-                st.session_state['df_all'] = df_new
-                st.success(f"成功获取了 {len(df_new)} 条记录。")
-            else:
-                st.error("未找到日期列。")
+        for i, url in enumerate(target_urls):
+            # 显示当前进度
+            status_text.text(f"正在请求第 {i+1}/{len(target_urls)} 个接口...")
+            
+            # 调用原本的抓取函数
+            df_part = fetch_hkma_data(
+                url,
+                current_config['segment'],
+                fetch_start.strftime("%Y-%m-%d"),
+                fetch_end.strftime("%Y-%m-%d")
+            )
+            
+            if not df_part.empty:
+                # 寻找日期列
+                date_col_found = None
+                possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'end_of_date']
+                for col in possible_date_cols:
+                    if col in df_part.columns:
+                        date_col_found = col
+                        break
+                
+                if date_col_found:
+                    # 建立统一的合并基准列 'date_obj'
+                    df_part['date_obj'] = df_part[date_col_found]
+                    
+                    # === 核心合并逻辑 ===
+                    if final_df.empty:
+                        final_df = df_part
+                    else:
+                        # 按日期合并 (Outer Join 防止数据丢失)
+                        # suffixes 处理重名列 (如 total_x, total_y)
+                        final_df = pd.merge(final_df, df_part, on='date_obj', how='outer', suffixes=('', f'_{i}'))
+                    
+                    success_count += 1
+            
+            # 更新进度条
+            progress_bar.progress((i + 1) / len(target_urls))
+
+    # 4. 结果处理
+    status_text.empty()
+    progress_bar.empty()
+
+    if not final_df.empty:
+        # 按时间重新排序
+        final_df = final_df.sort_values('date_obj')
+        
+        st.session_state['df_all'] = final_df
+        st.success(f" 成功获取数据！(共合并 {success_count} 个接口，{len(final_df)} 行记录)")
+    else:
+        if success_count == 0:
+            st.warning("未找到有效数据，请检查日期范围。")
         else:
-            st.warning("未找到数据，请检查日期范围。")
+            st.error("数据合并失败，请检查API返回格式。")
 
 # === 8. 主界面展示 ===
 if st.session_state['df_all'] is not None:
