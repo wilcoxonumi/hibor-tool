@@ -53,6 +53,14 @@ hibor_overnight,数字,年利率,隔夜港元银行同业拆息
 hibor_fixing_1m,数字,年利率,香港銀行公會1個月期港元銀行同業拆息定價
 opening_balance,数字,百萬港元,开市总结余
 closing_balance,数字,百萬港元,收市总结余
+# === 3.2 存款 ===
+fc_swap_deposits,数字,百万港元,外币掉期存款
+deposits_hkd,数字,百万港元,认可机构存款(已就外币掉期存款作出调整)港元
+deposits_usd,数字,百万港元,认可机构存款(已就外币掉期存款作出调整)美元
+deposits_nonusd_fc,数字,百万港元,认可机构存款(已就外币掉期存款作出调整)非美元外币
+deposits_all_fc,数字,百万港元,认可机构存款(已就外币掉期存款作出调整)所有外币
+deposits_all,数字,百万港元,认可机构存款(已就外币掉期存款作出调整)所有货币
+
 
 
 
