@@ -13,36 +13,36 @@ st.title("HKMA 金融数据提取工具")
 
 # === 2. 定义数据源配置 ===
 API_CONFIG = {
-    "HIBOR (香港银行同业拆息)": {
+    "HIBOR (monthly-香港银行同业拆息)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
         "segment": "hibor.fixing",
         "date_col": "end_of_day",
         "title_en": "HIBOR Interest Rates - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily/"
     },
-    "Exchange Fund Bills & Notes (外汇基金票据及债券收益率)": {
+    "Exchange Fund Bills & Notes (monthly-外汇基金票据及债券收益率)": {
         # 
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/efbn/efbn-yield-daily",
-        "segment": None, # 这个接口通常不需要 segment 参数
+        "segment": None, # 这个接口一般不需要 segment parameter
         "date_col": "end_of_day",
         "title_en": "Exchange Fund Bills & Notes Yields - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/efbn/efbn-yield-daily/"
     },
-    "RMB Deposit Rates (人民币存款利率)": {
+    "RMB Deposit Rates (monthly-人民币存款利率)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr",
         "segment": None,
         "date_col": "end_of_month",
         "title_en": "RMB Deposit Rates",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/er-ir/renminbi-dr/"
     },
-    "Monetary Statistics (货币统计)": {
+    "Monetary Statistics (monthly-货币统计)": {
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics",
         "segment": None,
         "date_col": "end_of_month",
         "title_en": "Monetary Statistics",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
     },
-    "Interbank Liquidity (银行同业流动资金)": {
+    "Interbank Liquidity (daily-银行同业流动资金)": {
         # === try 新增接口 ===
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity",
         "segment": None, 
@@ -50,9 +50,9 @@ API_CONFIG = {
         "title_en": "Interbank Liquidity - Daily",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity/"
     },
-    # === 新增：银行体系 (multiple api) ===
-    "Banking Statistics (银行体系 - 综合数据)": {
-        # 列表 List []，放多个 api
+    # === 银行体系 (multiple api) ===
+    "Banking Statistics (monthly-银行体系 - 综合数据)": {
+        #
         "url": [
             # 3.2 客户存款 (按货币)
             "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/customer-deposits-by-currency",
@@ -62,16 +62,16 @@ API_CONFIG = {
             "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/assetquality-ais",
             # 3.9.2 资产负债表-持牌银行
             "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/banking/balance-sheet-lb",
-            # ... 在这里继续添加 3.5, 3.6 等链接 ...
+            # ... 其他的链接还没添加 ...
         ],
         "segment": None,
-        "date_col": "end_of_month", # check一下日期名
+        "date_col": "end_of_month", # check一下日期名是month or date
         "title_en": "Banking Statistics (Integrated)",
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/banking/"
     }
 }
 
-# === 3. 读取 CSV 配置 ===
+# === 3. read CSV  ===
 @st.cache_data
 def load_variable_meta():
     try:
@@ -89,20 +89,20 @@ def get_display_info(var_name):
     if pd.isna(info.get('label')): info['label'] = var_name
     return info
 
-# === 4. 初始化 Session State ===
+# === 4. Initialise Session State ===
 if 'df_all' not in st.session_state:
     st.session_state['df_all'] = None
 if 'current_source' not in st.session_state:
     st.session_state['current_source'] = ""
 
-# === 5. 侧边栏：控制面板 ===
+# === 5. 侧边栏控制面板 ===
 with st.sidebar:
     st.header("1. 数据源设置")
     selected_source_name = st.selectbox("选择数据", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     st.divider()
     
-    # === 新增：强制清除缓存按钮  ===
+    # === add：强制清除缓存按钮  ===
     if st.button("强制清除缓存"):
         st.cache_data.clear()
         st.rerun()
