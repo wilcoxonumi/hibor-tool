@@ -43,7 +43,7 @@ API_CONFIG = {
         "doc_url": "https://apidocs.hkma.gov.hk/gb_chi/documentation/market-data-and-statistics/monthly-statistical-bulletin/financial/monetary-statistics/"
     },
     "Interbank Liquidity (daily-银行同业流动资金)": {
-        # === try 新增接口 ===
+        # === try 新增接口 haven't been finished, e.g. config csv===
         "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity",
         "segment": None, 
         "date_col": "end_of_date",
@@ -147,7 +147,7 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     df = pd.DataFrame(all_records)
     
     date_col_found = None
-    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date','end_of_date']
+    possible_date_cols = ['end_of_day', 'end_of_month', 'date', 'observation_date','end_of_date'] #observation_date可以去掉
     for col in possible_date_cols:
         if col in df.columns:
             date_col_found = col
@@ -161,7 +161,7 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
         
     return df
 
-# === 7. 执行提取逻辑 (单接口 & 多接口自动合并) ===
+# === 7. 提取 (单接口 & 多接口) ===
 if fetch_btn:
     # 1. 重置状态 (切换数据源时)
     if st.session_state['current_source'] != selected_source_name:
@@ -238,14 +238,14 @@ if fetch_btn:
         else:
             st.error("数据合并失败，请检查API返回格式。")
 
-# === 8. 主界面展示 ===
+# === 8. 主界面 ===
 if st.session_state['df_all'] is not None:
     df = st.session_state['df_all']
     current_config = API_CONFIG[st.session_state['current_source']]
     
     st.divider()
     
-    # --- 下载模块 ---
+    # --- 下载 ---
     st.header(f"2. 数据下载: {st.session_state['current_source']}")
     if "doc_url" in current_config:
         st.markdown(f" **数据定义与来源:** [点击查看 HKMA 官方字段说明文档]({current_config['doc_url']})")
@@ -369,9 +369,9 @@ if st.session_state['df_all'] is not None:
                 primary_vars = secondary_vars
                 secondary_vars = []
             
-            # === B. 字体与绘图 ===
+            # === B. font & graph ===
             my_font = None
-            font_path = "SimHei.ttf"
+            font_path = "SimHei.ttf" #需要的字体先放进github再用
             if os.path.exists(font_path): my_font = fm.FontProperties(fname=font_path)
             else: plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'sans-serif']
 
