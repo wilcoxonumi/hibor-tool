@@ -98,7 +98,7 @@ if 'current_source' not in st.session_state:
 # === 5. 侧边栏控制面板 ===
 with st.sidebar:
     st.header("1. 数据源设置")
-    selected_source_name = st.selectbox("选择数据", options=list(API_CONFIG.keys()))
+    selected_source_name = st.selectbox("第一步：选择数据", options=list(API_CONFIG.keys()))
     current_config = API_CONFIG[selected_source_name]
     st.divider()
     
@@ -107,13 +107,13 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
     
-    st.info(f"设置 {selected_source_name} 的抓取范围")
+    st.info(f"第二步：设置 {selected_source_name} 的抓取范围")
     earliest_date = date(1990, 1, 1)
     default_start = date(date.today().year - 1, 1, 1)
     
     fetch_start = st.date_input("抓取开始日期", value=default_start, min_value=earliest_date, max_value=date.today())
     fetch_end = st.date_input("抓取结束日期", value=date.today(), min_value=earliest_date, max_value=date.today())
-    fetch_btn = st.button("点击提取数据", type="primary")
+    fetch_btn = st.button("第三步：点击提取数据", type="primary")
 
 # === 6. 数据提取函数 ===
 @st.cache_data
