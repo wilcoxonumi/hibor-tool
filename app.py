@@ -14,7 +14,7 @@ st.title("HKMA 金融数据提取工具")
 # === 2. 定义数据源配置 ===
 API_CONFIG = {
     "HIBOR (monthly-香港银行同业拆息)": {
-        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily",
+        "url": "https://api.hkma.gov.hk/public/market-data-and-statistics/monthly-statistical-bulletin/er-ir/hk-interbank-ir-daily?segment=hibor.fixing",
         "segment": "hibor.fixing",
         "date_col": "end_of_day",
         "title_en": "HIBOR Interest Rates - Daily",
