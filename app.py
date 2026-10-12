@@ -117,7 +117,7 @@ with st.sidebar:
 
 # === 6. 数据提取函数 ===
 @st.cache_data
-def fetch_hkma_data(api_url, segment, start_str, end_str):
+def fetch_hkma_data(api_url, segment, start_str, end_str, date_col):
     pagesize = 1000
     offset = 0
     all_records = []
@@ -127,7 +127,13 @@ def fetch_hkma_data(api_url, segment, start_str, end_str):
     
     while True:
         placeholder.text(f"正在读取 HKMA 接口... Offset: {offset}")
-        params = {"pagesize": pagesize, "offset": offset, "from": start_str, "to": end_str}
+        params = {
+            "pagesize": pagesize,
+            "offset": offset,
+            "choose": date_col,
+            "from": start_str,
+            "to": end_str
+        }
         if segment: params["segment"] = segment
         try:
             response = requests.get(api_url, params=params)
@@ -189,11 +195,13 @@ if fetch_btn:
             status_text.text(f"正在请求第 {i+1}/{len(target_urls)} 个接口...")
             
             # 调用原本的抓取函数
+           
             df_part = fetch_hkma_data(
                 url,
                 current_config['segment'],
                 fetch_start.strftime("%Y-%m-%d"),
-                fetch_end.strftime("%Y-%m-%d")
+                fetch_end.strftime("%Y-%m-%d"),
+                current_config['date_col']
             )
             
             if not df_part.empty:
